@@ -245,11 +245,11 @@ button.action-btn.secondary{
 <body>
 <div id="wrapper">
   <div id="hud">
-    <span id="h-title">🌭 SUPER DACHSHUND</span>
+    <span id="h-title">★ SUPER DACHSHUND</span>
     <span><span id="h-bones-mini"></span> <span class="val" id="h-bones">0</span></span>
-    <span>❤️ <span class="val" id="h-lives">3</span></span>
+    <span>♥ <span class="val" id="h-lives">3</span></span>
     <span>NIVEL <span class="val" id="h-level">1</span></span>
-    <span id="h-ammo" style="display:none;color:#ffd34d;font-weight:700;">🦴✨ <span id="h-shots">0</span></span>
+    <span id="h-ammo" style="display:none;color:#ffd34d;font-weight:700;">● <span id="h-shots">0</span></span>
     <span id="h-extra" style="color:#888;font-size:12px;">Z=saltar &nbsp;·&nbsp; X=disparar &nbsp;·&nbsp; P=pausa</span>
   </div>
   <canvas id="c"></canvas>
@@ -257,7 +257,7 @@ button.action-btn.secondary{
 
 <!-- ═══════════ Menú principal ═══════════ -->
 <div id="msg-main" class="overlay">
-  <h1>🌭 SUPER DACHSHUND BROS 🌭</h1>
+  <h1>★ SUPER DACHSHUND BROS ★</h1>
   <p class="sub">¡Recoge huesos, aplasta gatos, vence al Gato Rey y supera Nordeltopolis!</p>
   <h2>Elegí tu héroe</h2>
   <div id="char-select">
@@ -265,20 +265,20 @@ button.action-btn.secondary{
       <canvas id="prev-wiener" width="120" height="80"></canvas>
       <div class="name">WIENER</div>
       <div class="desc">El clásico salchicha valiente. Equilibrado y ágil.</div>
-      <div class="stats"><span>⚡ Ágil</span><span>🦴 Equilibrado</span></div>
+      <div class="stats"><span>» Ágil</span><span>» Equilibrado</span></div>
     </div>
     <div class="char-card" data-char="doverman">
       <canvas id="prev-doverman" width="120" height="80"></canvas>
       <div class="name">SALCHI-DOBERMAN</div>
       <div class="desc">Más alto, más fuerte, salta más alto pero un poco más lento.</div>
-      <div class="stats"><span>💪 Fuerte</span><span>🚀 Salto +</span></div>
+      <div class="stats"><span>» Fuerte</span><span>» Salto +</span></div>
     </div>
   </div>
   <div class="controls-grid">
     <div><span>← →</span> Moverse</div>
     <div><span>Z / ESPACIO / ↑</span> Saltar</div>
     <div><span>Saltar encima</span> Aplastar enemigos</div>
-    <div><span>X</span> Disparar huesito 🦴</div>
+    <div><span>X</span> Disparar</div>
     <div><span>Bloque ?</span> Golpear desde abajo</div>
     <div><span>P</span> Pausa</div>
   </div>
@@ -386,7 +386,7 @@ let chosenChar = 'wiener';    // 'wiener' | 'doverman'
 let levelTransitioning = false;
 
 // Tiles que el jugador y enemigos consideran sólidos
-const SOLID = new Set(['gnd','brk','qb','qbLife','ptop','pbod','sld','stone','dngnd','fall','ice','grassIsle','bridge']);
+const SOLID = new Set(['gnd','brk','qb','qbLife','ptop','pbod','ftop','fbod','sld','stone','dngnd','fall','ice','grassIsle','bridge']);
 
 // Caché GPU para fondo estático del nivel actual
 const bgCanvas = document.createElement('canvas');
@@ -453,12 +453,12 @@ function hud(){
   lvlEl.textContent = level;
   lvlEl.className = level===2?'val lvl2':level===3?'val lvl3':level===4?'val lvl4':'val';
   const titles = [
-    '🌭 WIENER · PRADERA',
-    '🌙 WIENER · CAVERNA',
-    '🛹 WONDER WIENER',
-    '🐹 NORDELTOPOLIS'
+    '★ MUNDO 1 · PRADERA',
+    '★ MUNDO 2 · CAVERNA',
+    '★ MUNDO 3 · WONDER WIENER',
+    '★ MUNDO 4 · NORDELTOPOLIS'
   ];
-  document.getElementById('h-title').textContent = titles[level-1] || '🌭 SUPER DACHSHUND';
+  document.getElementById('h-title').textContent = titles[level-1] || '★ SUPER DACHSHUND';
   const ammoEl = document.getElementById('h-ammo');
   ammoEl.style.display = shots>0 ? 'inline-flex' : 'none';
   document.getElementById('h-shots').textContent = shots;
@@ -478,7 +478,7 @@ function rewardBone(amount){
     bones = 0; // marcador visible vuelve a 0
     burst(P.x + P.w/2, P.y, '#ff6080', 22, 1.4);
     burst(P.x + P.w/2, P.y, '#ffd34d', 18, 1.2);
-    showFloatingText('+1 ❤️ EXTRA', P.x + P.w/2, P.y - 10, '#ff80a0');
+    showFloatingText('+1 ♥ EXTRA', P.x + P.w/2, P.y - 10, '#ff80a0');
   }
   hud();
 }
@@ -501,6 +501,14 @@ function pipe(tx, h){
   for(let r=0;r<h;r++){
     T(tx, 11-r, r===0?'ptop':'pbod');
     T(tx+1, 11-r, r===0?'ptop':'pbod');
+  }
+}
+function firehydrant(tx, h){
+  // Boca de incendio roja — ocupa 2 tiles de ancho (igual que pipe)
+  // Topo en r===0 (capucha dorada), cuerpo abajo
+  for(let r=0;r<h;r++){
+    T(tx,   11-r, r===0?'ftop':'fbod');
+    T(tx+1, 11-r, r===0?'ftop':'fbod');
   }
 }
 // Enemigo con trayectoria suave (mejora natural del movimiento)
@@ -536,6 +544,7 @@ function addEnemy(tx, ty, opts){
 function buildLevel1(){
   tiles=[]; enemies=[]; items=[]; parts=[];
   window._flagX = 99999999;
+  window._queenLulu = null;
   const LW = 220;
 
   // Suelo continuo con huecos manejables (siempre <=4 tiles)
@@ -598,7 +607,7 @@ function buildLevel1(){
   T(188,7,'qb');
 
   // Tuberías razonables (no demasiado altas para no bloquear acceso)
-  pipe(17, 2); pipe(36, 3); pipe(70, 2); pipe(102, 2); pipe(142, 3); pipe(165, 2);
+  firehydrant(17, 2); firehydrant(36, 3); firehydrant(70, 2); firehydrant(102, 2); firehydrant(142, 3); firehydrant(165, 2);
 
   // Escalera y bandera
   for(let s=0; s<8; s++){
@@ -646,6 +655,7 @@ function buildLevel1(){
 function buildLevel2(){
   tiles=[]; enemies=[]; items=[]; parts=[];
   window._flagX = 99999999;
+  window._queenLulu = null;
   const BOSS_START = 168, BOSS_END = 192;
 
   // Suelo continuo (huecos solo en zona inicial pero salvables)
@@ -814,6 +824,7 @@ function buildLevel2(){
 function buildLevel3(){
   tiles=[]; enemies=[]; items=[]; parts=[];
   window._flagX = 99999999;
+  window._queenLulu = null;
   window._skateboard = null;
   window._artifacts = [];
   const LW = 280;
@@ -870,7 +881,7 @@ function buildLevel3(){
   for(let x=246; x<=254; x++) T(x,8,'sld');
 
   // Tuberías-palmeras (cortas, no obstáculo)
-  pipe(31, 2); pipe(75, 2); pipe(127, 2); pipe(184, 2); pipe(244, 3);
+  firehydrant(31, 2); firehydrant(75, 2); firehydrant(127, 2); firehydrant(184, 2); firehydrant(244, 3);
 
   // ── PATINETA — en lugar accesible (suelo, fácil de recoger) ──
   // El jugador la encuentra al caminar; está en una plataforma baja inicial
@@ -1072,6 +1083,14 @@ function buildLevel4(){
     tiles.push({x:191*TILE, y:r*TILE, w:4, h:TILE, t:'pole', hit:false});
   }
   window._flagX = 191*TILE;
+
+  // ── REINA LULU — perrita blanca Bichón Maltés esperando a ser rescatada ──
+  // Ubicada en la isla final, justo antes de la bandera
+  window._queenLulu = {
+    x: 188*TILE, y: 10*TILE - 18,
+    w: 22, h: 20,
+    bobT: 0, blinkT: 0, rescued: false
+  };
 
   // ── HUESOS — distribuidos sobre las islas, accesibles ──
   [
@@ -1320,7 +1339,7 @@ function updatePlayer(){
       hud();
       burst(sk.x + sk.w/2, sk.y, '#00d4ff', 22);
       burst(sk.x + sk.w/2, sk.y, '#ffd34d', 14);
-      showFloatingText('🛹 +5 🦴', P.x + P.w/2, P.y - 8, '#00d4ff');
+      showFloatingText('+5', P.x + P.w/2, P.y - 8, '#00d4ff');
     }
   }
 
@@ -1334,7 +1353,7 @@ function updatePlayer(){
         a.alive = false;
         rewardBone(3); // artefactos valen +3
         burst(a.x + a.w/2, a.y, '#ffd34d', 12);
-        showFloatingText('+3 🦴', a.x, a.y - 6, '#ffd34d');
+        showFloatingText('+3', a.x, a.y - 6, '#ffd34d');
       }
     }
   }
@@ -1383,7 +1402,21 @@ function updateEnemies(){
       const targetDir = (P.x > e.x) ? 1 : -1;
       const targetVx = targetDir * e.baseSpd;
       e.vx += (targetVx - e.vx) * 0.012;
-      e.x += e.vx;
+
+      // Probar la siguiente posición — si hay tierra (isla) en el camino, rebotar
+      const nextX = e.x + e.vx;
+      const probe = {x: nextX, y: e.y, w: e.w, h: e.h};
+      let blocked = false;
+      for(const t of tiles){
+        if(!SOLID.has(t.t)) continue;
+        if(aabb(probe, t)){ blocked = true; break; }
+      }
+      if(blocked){
+        // Empuja al carpincho hacia atrás suavemente (no atraviesa la isla)
+        e.vx = -e.vx * 0.5;
+      } else {
+        e.x = nextX;
+      }
       // Mira al jugador
       e.dir = e.vx > 0 ? 1 : -1;
       // Colisión con jugador
@@ -1585,8 +1618,8 @@ function updateBoss(){
         won = true; levelTransitioning = true;
         cam.shakeT = 24;
         setTimeout(()=>{
-          showMsg('🏁 ¡NIVEL 2 COMPLETO!',
-            '¡Venciste al Gato Rey! Próximo: Wonder Wiener 🛹',
+          showMsg('¡NIVEL 2 COMPLETO!',
+            '¡Venciste al Gato Rey! Próximo: Wonder Wiener',
             'CONTINUAR',
             ()=>{ initLevel(3); });
         }, 1100);
@@ -1628,11 +1661,11 @@ function updateItems(){
         c.alive = false;
         if(c.lifeBonus){
           lives++; hud();
-          showFloatingText('+1 ❤️', c.x, c.y, '#ff80a0');
+          showFloatingText('+1 ♥', c.x, c.y, '#ff80a0');
           burst(c.x+5, c.y, '#ff6080', 16);
         } else if(c.golden){
           shots += 5; hud();
-          showFloatingText('+5 🦴', c.x, c.y, '#ffd34d');
+          showFloatingText('+5', c.x, c.y, '#ffd34d');
         } else {
           rewardBone(1);
         }
@@ -1643,20 +1676,20 @@ function updateItems(){
       c.alive = false;
       if(c.lifeBonus){
         lives++; hud();
-        showFloatingText('+1 ❤️', c.x, c.y, '#ff80a0');
+        showFloatingText('+1 ♥', c.x, c.y, '#ff80a0');
         burst(c.x+5, c.y, '#ff6080', 12);
       } else if(c.golden){
         shots += 5;
         burst(c.x+5, c.y, '#ffd34d', 10);
         burst(c.x+5, c.y, '#ffffff', 5);
-        showFloatingText('+5 🦴', c.x, c.y, '#ffd34d');
+        showFloatingText('+5', c.x, c.y, '#ffd34d');
         hud();
       } else {
         // Hueso normal: cuenta para el contador "bones" visible
         bones++; totalBonesEarned++; bonesSinceLastLife++;
         if(bonesSinceLastLife >= 100){
           bonesSinceLastLife -= 100; lives++; bones = 0;
-          showFloatingText('+1 ❤️ EXTRA', P.x+P.w/2, P.y-10, '#ff80a0');
+          showFloatingText('+1 ♥ EXTRA', P.x+P.w/2, P.y-10, '#ff80a0');
           burst(P.x+P.w/2, P.y, '#ff6080', 22, 1.4);
         }
         burst(c.x+5, c.y, '#ffd34d', 6);
@@ -1726,8 +1759,8 @@ function updatePlayerBullets(){
           won = true; levelTransitioning = true;
           cam.shakeT = 24;
           setTimeout(()=>{
-            showMsg('🏁 ¡NIVEL 2 COMPLETO!',
-              '¡Venciste al Gato Rey! Próximo: Wonder Wiener 🛹',
+            showMsg('¡NIVEL 2 COMPLETO!',
+              '¡Venciste al Gato Rey! Próximo: Wonder Wiener',
               'CONTINUAR',
               ()=>{ initLevel(3); });
           }, 1100);
@@ -1762,13 +1795,13 @@ function checkFlag(){
   if(P.x + P.w > window._flagX && P.x < window._flagX + 8){
     won = true; levelTransitioning = true;
     if(level === 1){
-      showMsg('🏁 ¡NIVEL 1 COMPLETO!',
-        '¡A la mazmorra! Nivel 2: Caverna del Gato Rey 🌙',
+      showMsg('¡NIVEL 1 COMPLETO!',
+        '¡A la mazmorra! Nivel 2: Caverna del Gato Rey',
         'CONTINUAR',
         ()=>{ initLevel(2); });
     } else if(level === 3){
-      showMsg('🏁 ¡NIVEL 3 COMPLETO!',
-        '¡Wonder Wiener triunfa! Próximo: Nordeltopolis 🐹',
+      showMsg('¡NIVEL 3 COMPLETO!',
+        '¡Wonder Wiener triunfa! Próximo: Nordeltopolis',
         'CONTINUAR',
         ()=>{ initLevel(4); });
     } else if(level === 4){
@@ -1870,6 +1903,71 @@ function drawTile(t){
       ctx.fillRect(x, y, TILE, TILE);
       ctx.fillStyle = 'rgba(255,255,255,0.2)';
       ctx.fillRect(x+3, y, 3, TILE);
+      break;
+    }
+    case 'ftop': {
+      // Capucha de la boca de incendio: domo dorado + tornillo central + salidas laterales
+      // Cuerpo rojo abajo de la capucha
+      const gBody = ctx.createLinearGradient(x, y+TILE*0.45, x+TILE, y+TILE*0.45);
+      gBody.addColorStop(0, '#8a1010'); gBody.addColorStop(0.5, '#dc2828'); gBody.addColorStop(1, '#8a1010');
+      ctx.fillStyle = gBody;
+      ctx.fillRect(x, y+TILE*0.45, TILE, TILE*0.55);
+      // Brillo vertical del cuerpo
+      ctx.fillStyle = 'rgba(255,255,255,0.22)';
+      ctx.fillRect(x+3, y+TILE*0.45, 2, TILE*0.55);
+
+      // Domo / capucha dorada arriba (forma redondeada con gradiente)
+      const gCap = ctx.createLinearGradient(x, y, x, y+TILE*0.45);
+      gCap.addColorStop(0, '#ffe080'); gCap.addColorStop(0.5, '#d4a040'); gCap.addColorStop(1, '#8a6020');
+      ctx.fillStyle = gCap;
+      ctx.beginPath();
+      ctx.moveTo(x+1, y+TILE*0.5);
+      ctx.lineTo(x+1, y+TILE*0.25);
+      ctx.quadraticCurveTo(x+TILE/2, y-2, x+TILE-1, y+TILE*0.25);
+      ctx.lineTo(x+TILE-1, y+TILE*0.5);
+      ctx.closePath();
+      ctx.fill();
+      // Tornillo central pentagonal
+      ctx.fillStyle = '#603010';
+      ctx.beginPath();
+      ctx.arc(x+TILE/2, y+TILE*0.18, 2.5, 0, Math.PI*2);
+      ctx.fill();
+      // Borde del cuello
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.fillRect(x, y+TILE*0.43, TILE, 2);
+      break;
+    }
+    case 'fbod': {
+      // Cuerpo principal — cilindro rojo con salidas laterales y banda
+      const g = ctx.createLinearGradient(x, y, x+TILE, y);
+      g.addColorStop(0, '#7a0e0e'); g.addColorStop(0.5, '#dc2828'); g.addColorStop(1, '#7a0e0e');
+      ctx.fillStyle = g;
+      ctx.fillRect(x, y, TILE, TILE);
+      // Brillo vertical
+      ctx.fillStyle = 'rgba(255,255,255,0.22)';
+      ctx.fillRect(x+3, y, 2, TILE);
+      // Sombra interior
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.fillRect(x+TILE-3, y, 2, TILE);
+      // Salida lateral (boquilla redonda) — solo en el primer tile del cuerpo
+      // Detectamos si justo arriba hay un ftop (osea, este es el tile inmediatamente debajo de la capucha)
+      const aboveIsCap = tiles.some(o => o.t === 'ftop' && o.x === t.x && o.y === t.y - TILE);
+      if(aboveIsCap){
+        // Boquilla a la izquierda
+        ctx.fillStyle = '#ffd040';
+        ctx.beginPath();
+        ctx.arc(x+1, y+TILE/2, 3, 0, Math.PI*2);
+        ctx.fill();
+        ctx.fillStyle = '#603010';
+        ctx.beginPath();
+        ctx.arc(x+1, y+TILE/2, 1.5, 0, Math.PI*2);
+        ctx.fill();
+        // Banda horizontal dorada decorativa
+        ctx.fillStyle = '#d4a040';
+        ctx.fillRect(x, y+TILE-4, TILE, 2);
+        ctx.fillStyle = '#8a6020';
+        ctx.fillRect(x, y+TILE-2, TILE, 1);
+      }
       break;
     }
     case 'sld': {
@@ -2942,8 +3040,168 @@ function drawSkateboardItem(){
     ctx.fillStyle = '#00d4ff';
     ctx.font = 'bold 9px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('🛹 RECOGER', x+sk.w/2, y - 6);
+    ctx.fillText('▲ RECOGER', x+sk.w/2, y - 6);
     ctx.textAlign = 'left';
+  }
+}
+
+function drawQueenLulu(){
+  if(!window._queenLulu) return;
+  const q = window._queenLulu;
+  const screenX = q.x - cam.x;
+  if(screenX < -40 || screenX > CW + 40) return;
+  q.bobT = (q.bobT || 0) + 0.05;
+  q.blinkT = (q.blinkT || 0) + 1;
+  const bob = Math.sin(q.bobT) * 1.5;
+  const x = screenX, y = q.y + bob;
+
+  // ── Aura mágica de la reina ──
+  const auraGlow = 0.5 + Math.sin(fc*0.06)*0.5;
+  ctx.fillStyle = 'rgba(255,180,220,'+(0.15+auraGlow*0.12)+')';
+  ctx.beginPath();
+  ctx.arc(x+q.w/2, y+q.h/2, 28, 0, Math.PI*2);
+  ctx.fill();
+
+  // ── Sombra ──
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.beginPath();
+  ctx.ellipse(x+q.w/2, y+q.h+2, q.w/2, 3, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // ── Cuerpo (algodón blanco esponjoso) ──
+  // Capas de "pelo esponjoso" superpuestas para el efecto Bichón
+  ctx.fillStyle = '#fff';
+  // Cuerpo principal — más redondo que un salchicha, casi bola
+  ctx.beginPath();
+  ctx.ellipse(x+q.w/2, y+q.h*0.65, q.w/2 + 1, q.h*0.4, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // Pechera frontal esponjosa
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.arc(x+q.w*0.32, y+q.h*0.7, 5, 0, Math.PI*2);
+  ctx.arc(x+q.w*0.62, y+q.h*0.72, 5, 0, Math.PI*2);
+  ctx.fill();
+
+  // Patitas (apenas visibles bajo el pelaje)
+  ctx.fillStyle = '#f0e0d8';
+  ctx.fillRect(x+5, y+q.h-3, 3, 3);
+  ctx.fillRect(x+q.w-8, y+q.h-3, 3, 3);
+
+  // ── Cabeza redonda esponjosa ──
+  const hx = x + q.w*0.5, hy = y + q.h*0.32;
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.arc(hx, hy, 9, 0, Math.PI*2);
+  ctx.fill();
+  // Mejillas esponjosas (extras de pelo)
+  ctx.beginPath();
+  ctx.arc(hx-7, hy+3, 4, 0, Math.PI*2);
+  ctx.arc(hx+7, hy+3, 4, 0, Math.PI*2);
+  ctx.fill();
+
+  // ── Orejas largas caídas (rasgo distintivo del Maltés) ──
+  ctx.fillStyle = '#f8f8f8';
+  // Oreja izquierda
+  ctx.beginPath();
+  ctx.ellipse(hx-9, hy+4, 3.5, 7, -0.3, 0, Math.PI*2);
+  ctx.fill();
+  // Oreja derecha
+  ctx.beginPath();
+  ctx.ellipse(hx+9, hy+4, 3.5, 7, 0.3, 0, Math.PI*2);
+  ctx.fill();
+
+  // ── Hocico (cara) ──
+  ctx.fillStyle = '#f0e0d0';
+  ctx.beginPath();
+  ctx.arc(hx, hy+3, 3, 0, Math.PI*2);
+  ctx.fill();
+
+  // Nariz negra pequeña
+  ctx.fillStyle = '#1a1a1a';
+  ctx.beginPath();
+  ctx.arc(hx, hy+1.5, 1.2, 0, Math.PI*2);
+  ctx.fill();
+
+  // Ojos — parpadeo ocasional
+  const blink = (q.blinkT % 180) > 175;
+  if(blink){
+    // Cerrados
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(hx-3.5, hy-1, 2, 0.5);
+    ctx.fillRect(hx+1.5, hy-1, 2, 0.5);
+  } else {
+    // Abiertos brillosos negros
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath();
+    ctx.arc(hx-2.5, hy-1, 1.4, 0, Math.PI*2);
+    ctx.arc(hx+2.5, hy-1, 1.4, 0, Math.PI*2);
+    ctx.fill();
+    // Brillito blanco
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(hx-2.2, hy-1.5, 0.5, 0, Math.PI*2);
+    ctx.arc(hx+2.8, hy-1.5, 0.5, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  // ── Corona dorada de reina ──
+  ctx.fillStyle = '#ffd34d';
+  // Base de la corona
+  ctx.fillRect(hx-7, hy-9, 14, 2);
+  // Tres picos
+  ctx.beginPath();
+  ctx.moveTo(hx-7, hy-9);
+  ctx.lineTo(hx-5, hy-13);
+  ctx.lineTo(hx-3, hy-9);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(hx-1, hy-9);
+  ctx.lineTo(hx, hy-14);
+  ctx.lineTo(hx+1, hy-9);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(hx+3, hy-9);
+  ctx.lineTo(hx+5, hy-13);
+  ctx.lineTo(hx+7, hy-9);
+  ctx.fill();
+  // Joyas de la corona (rosa/cian)
+  ctx.fillStyle = '#ff80a0';
+  ctx.beginPath(); ctx.arc(hx-5, hy-12, 0.8, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#80d0ff';
+  ctx.beginPath(); ctx.arc(hx, hy-13, 0.8, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#ff80a0';
+  ctx.beginPath(); ctx.arc(hx+5, hy-12, 0.8, 0, Math.PI*2); ctx.fill();
+  // Brillo en la corona
+  ctx.fillStyle = '#fff8b0';
+  ctx.fillRect(hx-7, hy-9, 14, 0.5);
+
+  // ── Moño rosa (decoración entre las orejas) ──
+  ctx.fillStyle = '#ff80a0';
+  ctx.beginPath();
+  ctx.arc(hx-2.5, hy-7, 1.5, 0, Math.PI*2);
+  ctx.arc(hx+2.5, hy-7, 1.5, 0, Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = '#ffa0c0';
+  ctx.beginPath();
+  ctx.arc(hx, hy-7, 0.8, 0, Math.PI*2);
+  ctx.fill();
+
+  // ── Texto flotante "REINA LULU" cuando el jugador se acerca ──
+  const distToPlayer = Math.abs((P.x + P.w/2) - (q.x + q.w/2));
+  if(distToPlayer < 80){
+    const alpha = Math.max(0.4, 1 - distToPlayer/80);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = '#ff80a0';
+    ctx.shadowColor = '#000';
+    ctx.shadowBlur = 4;
+    ctx.font = 'bold 11px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('★ REINA LULU ★', x+q.w/2, y - 8);
+    ctx.shadowBlur = 0;
+    ctx.textAlign = 'left';
+    ctx.restore();
   }
 }
 
@@ -2994,15 +3252,33 @@ function drawArtifacts(){
       ctx.fillStyle = '#fff';
       ctx.fillRect(x+4, y+4+bob, 2, 2);
     } else if(a.kind === 'buoy'){
-      // Boya naranja
-      ctx.fillStyle = '#ff6028';
+      // Salvavidas — anillo rojo con cuatro segmentos blancos (forma clásica)
+      const cx = x+7, cy = y+9+bob;
+      // Aro rojo exterior
+      ctx.fillStyle = '#dc2828';
       ctx.beginPath();
-      ctx.roundRect(x+2, y+2+bob, 10, 16, 5);
+      ctx.arc(cx, cy, 8, 0, Math.PI*2);
       ctx.fill();
+      // Cuatro segmentos blancos (rotados 45°) en el aro
       ctx.fillStyle = '#fff';
-      ctx.fillRect(x+2, y+8+bob, 10, 4);
-      ctx.fillStyle = '#ff6028';
-      ctx.fillRect(x+5, y+9+bob, 4, 2);
+      for(let i=0;i<4;i++){
+        const ang = i * Math.PI/2 + Math.PI/4;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 8, ang - 0.35, ang + 0.35);
+        ctx.lineTo(cx, cy);
+        ctx.closePath();
+        ctx.fill();
+      }
+      // Hueco central (agua azul/transparente)
+      ctx.fillStyle = '#15487a';
+      ctx.beginPath();
+      ctx.arc(cx, cy, 3.5, 0, Math.PI*2);
+      ctx.fill();
+      // Brillo
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.beginPath();
+      ctx.arc(cx-3, cy-3, 1.5, 0, Math.PI*2);
+      ctx.fill();
     } else if(a.kind === 'reed'){
       // Junco
       ctx.fillStyle = '#28a040';
@@ -3042,7 +3318,7 @@ function drawShootButton(){
   ctx.textAlign = 'center';
   ctx.fillText('[X]', bx+bw/2, by+13);
   ctx.font = 'bold 10px system-ui, sans-serif';
-  ctx.fillText('🦴 ' + shots, bx+bw/2, by+25);
+  ctx.fillText('×' + shots, bx+bw/2, by+25);
   ctx.textAlign = 'left';
   ctx.restore();
 }
@@ -3087,7 +3363,7 @@ function drawPauseOverlay(){
   ctx.textAlign = 'center';
   ctx.shadowColor = '#000';
   ctx.shadowBlur = 8;
-  ctx.fillText('⏸ PAUSA', CW/2, CH/2 - 10);
+  ctx.fillText('|| PAUSA', CW/2, CH/2 - 10);
   ctx.font = '14px system-ui, sans-serif';
   ctx.fillText('Pulsa P para continuar', CW/2, CH/2 + 20);
   ctx.shadowBlur = 0;
@@ -3135,6 +3411,7 @@ function render(){
 
   // artifacts (level 3 & 4 decorations)
   drawArtifacts();
+  drawQueenLulu();
 
   // items (bones / golden / life)
   for(const it of items){
@@ -3349,11 +3626,11 @@ function showGameOver(){
   const msg = document.getElementById('msg');
   msg.innerHTML = `
     <div class="msg-card msg-card-lose">
-      <h2 class="msg-title">💀 GAME OVER 💀</h2>
+      <h2 class="msg-title">GAME OVER</h2>
       <p class="msg-sub">Te quedaste sin vidas</p>
       <div class="msg-stats">
-        <div class="stat-row"><span>🦴 Huesitos totales recolectados:</span> <strong>${totalBones}</strong></div>
-        <div class="stat-row"><span>🌍 Mundo alcanzado:</span> <strong>${level}</strong></div>
+        <div class="stat-row"><span>Huesitos totales recolectados:</span> <strong>${totalBones}</strong></div>
+        <div class="stat-row"><span>Mundo alcanzado:</span> <strong>${level}</strong></div>
       </div>
       <p class="msg-sub" style="margin-top:14px">¡Las municiones se reinician al perder las 3 vidas!</p>
       <button class="action-btn" id="msg-btn">VOLVER AL MENÚ</button>
@@ -3369,25 +3646,162 @@ function showGameOver(){
 function showFinalVictory(){
   loopGo = false;
   const totalBones = totalBonesEarned;
+  const heroName = chosenChar === 'wiener' ? 'Wiener' : 'Salchi-Doverman';
   const msg = document.getElementById('msg');
   msg.innerHTML = `
     <div class="msg-card msg-card-win">
-      <h2 class="msg-title">🏆 ¡VICTORIA TOTAL! 🏆</h2>
-      <p class="msg-sub">¡Conquistaste los 4 mundos!</p>
+      <h2 class="msg-title">★ ¡VICTORIA TOTAL! ★</h2>
+      <p class="msg-sub">¡Rescataste a la Reina Lulu!</p>
+      <div id="lulu-canvas-wrap" style="display:flex;justify-content:center;margin:8px 0 4px 0;">
+        <canvas id="lulu-final" width="160" height="120" style="background:linear-gradient(180deg,#4a90c8,#15487a);border-radius:10px;box-shadow:0 4px 18px rgba(255,180,220,0.4)"></canvas>
+      </div>
+      <p class="msg-sub" style="font-size:13px;color:#ffb0d0;margin-top:0">
+        La perrita maltesa más valiente de Nordeltopolis<br>
+        está a salvo gracias a <strong style="color:#ffd34d">${heroName}</strong>
+      </p>
       <div class="msg-stats">
-        <div class="stat-row"><span>🦴 Huesitos totales:</span> <strong>${totalBones}</strong></div>
-        <div class="stat-row"><span>❤️ Vidas restantes:</span> <strong>${lives}</strong></div>
-        <div class="stat-row"><span>🐶 Personaje:</span> <strong>${chosenChar === 'wiener' ? 'Wiener' : 'Salchi-Doverman'}</strong></div>
+        <div class="stat-row"><span>Huesitos totales:</span> <strong>${totalBones}</strong></div>
+        <div class="stat-row"><span>♥ Vidas restantes:</span> <strong>${lives}</strong></div>
+        <div class="stat-row"><span>Héroe:</span> <strong>${heroName}</strong></div>
       </div>
       <p class="msg-sub" style="margin-top:14px">¡Sos una leyenda canina!</p>
       <button class="action-btn" id="msg-btn">JUGAR DE NUEVO</button>
     </div>
   `;
   msg.classList.remove('hidden');
+  // Render Lulu rescatada en su canvas
+  setTimeout(()=>{
+    drawLuluFinal();
+  }, 50);
   document.getElementById('msg-btn').onclick = () => {
     msg.classList.add('hidden');
     document.getElementById('msg-main').classList.remove('hidden');
   };
+}
+
+// Renderiza a Lulu en el canvas de la pantalla final, con corazoncitos
+function drawLuluFinal(){
+  const c = document.getElementById('lulu-final');
+  if(!c) return;
+  const lctx = c.getContext('2d');
+  const W = c.width, H = c.height;
+  lctx.clearRect(0, 0, W, H);
+  // Fondo: agua nordeltense con brillos
+  // Estrellas chiquitas
+  lctx.fillStyle = 'rgba(255,255,255,0.6)';
+  for(let i=0;i<14;i++){
+    const sx = (i*23 + 11) % W;
+    const sy = (i*17 + 9) % (H*0.5);
+    lctx.fillRect(sx, sy, 1, 1);
+  }
+  // Lulu en el centro, escalada
+  const cx = W/2, cy = H*0.55;
+  const SC = 2.4;
+  lctx.save();
+  lctx.translate(cx, cy);
+  lctx.scale(SC, SC);
+  // Sombra
+  lctx.fillStyle = 'rgba(0,0,0,0.25)';
+  lctx.beginPath();
+  lctx.ellipse(0, 13, 12, 2, 0, 0, Math.PI*2);
+  lctx.fill();
+  // Cuerpo
+  lctx.fillStyle = '#fff';
+  lctx.beginPath();
+  lctx.ellipse(0, 4, 12, 8, 0, 0, Math.PI*2);
+  lctx.fill();
+  // Pechera
+  lctx.beginPath();
+  lctx.arc(-4, 6, 4.5, 0, Math.PI*2);
+  lctx.arc(4, 6.5, 4.5, 0, Math.PI*2);
+  lctx.fill();
+  // Cabeza
+  lctx.beginPath();
+  lctx.arc(0, -7, 9, 0, Math.PI*2);
+  lctx.fill();
+  lctx.beginPath();
+  lctx.arc(-7, -4, 4, 0, Math.PI*2);
+  lctx.arc(7, -4, 4, 0, Math.PI*2);
+  lctx.fill();
+  // Orejas largas caídas
+  lctx.fillStyle = '#f8f8f8';
+  lctx.beginPath();
+  lctx.ellipse(-9, -3, 3.5, 7, -0.3, 0, Math.PI*2);
+  lctx.fill();
+  lctx.beginPath();
+  lctx.ellipse(9, -3, 3.5, 7, 0.3, 0, Math.PI*2);
+  lctx.fill();
+  // Hocico
+  lctx.fillStyle = '#f0e0d0';
+  lctx.beginPath();
+  lctx.arc(0, -5, 3, 0, Math.PI*2);
+  lctx.fill();
+  // Nariz
+  lctx.fillStyle = '#1a1a1a';
+  lctx.beginPath();
+  lctx.arc(0, -7, 1.3, 0, Math.PI*2);
+  lctx.fill();
+  // Ojos
+  lctx.fillStyle = '#1a1a1a';
+  lctx.beginPath();
+  lctx.arc(-2.5, -8.5, 1.5, 0, Math.PI*2);
+  lctx.arc(2.5, -8.5, 1.5, 0, Math.PI*2);
+  lctx.fill();
+  lctx.fillStyle = '#fff';
+  lctx.beginPath();
+  lctx.arc(-2.2, -9, 0.6, 0, Math.PI*2);
+  lctx.arc(2.8, -9, 0.6, 0, Math.PI*2);
+  lctx.fill();
+  // Boquita feliz (sonrisa)
+  lctx.strokeStyle = '#1a1a1a';
+  lctx.lineWidth = 0.6;
+  lctx.beginPath();
+  lctx.arc(0, -5, 1.5, 0.3, Math.PI - 0.3);
+  lctx.stroke();
+  // Corona
+  lctx.fillStyle = '#ffd34d';
+  lctx.fillRect(-7, -16, 14, 2);
+  lctx.beginPath();
+  lctx.moveTo(-7,-16); lctx.lineTo(-5,-20); lctx.lineTo(-3,-16); lctx.fill();
+  lctx.beginPath();
+  lctx.moveTo(-1,-16); lctx.lineTo(0,-21); lctx.lineTo(1,-16); lctx.fill();
+  lctx.beginPath();
+  lctx.moveTo(3,-16); lctx.lineTo(5,-20); lctx.lineTo(7,-16); lctx.fill();
+  lctx.fillStyle = '#ff80a0';
+  lctx.beginPath(); lctx.arc(-5,-19,0.8,0,Math.PI*2); lctx.fill();
+  lctx.fillStyle = '#80d0ff';
+  lctx.beginPath(); lctx.arc(0,-20,0.8,0,Math.PI*2); lctx.fill();
+  lctx.fillStyle = '#ff80a0';
+  lctx.beginPath(); lctx.arc(5,-19,0.8,0,Math.PI*2); lctx.fill();
+  // Moño
+  lctx.fillStyle = '#ff80a0';
+  lctx.beginPath();
+  lctx.arc(-2.5, -14, 1.5, 0, Math.PI*2);
+  lctx.arc(2.5, -14, 1.5, 0, Math.PI*2);
+  lctx.fill();
+  lctx.restore();
+  // Corazoncitos flotando alrededor
+  lctx.fillStyle = '#ff80a0';
+  const hearts = [
+    [W*0.18, H*0.28, 6],
+    [W*0.82, H*0.32, 5],
+    [W*0.12, H*0.7, 4],
+    [W*0.88, H*0.72, 6]
+  ];
+  for(const [hx,hy,sz] of hearts){
+    lctx.save();
+    lctx.translate(hx, hy);
+    lctx.beginPath();
+    lctx.arc(-sz/3, -sz/4, sz/2.5, 0, Math.PI*2);
+    lctx.arc(sz/3, -sz/4, sz/2.5, 0, Math.PI*2);
+    lctx.fill();
+    lctx.beginPath();
+    lctx.moveTo(-sz/1.5, 0);
+    lctx.lineTo(0, sz);
+    lctx.lineTo(sz/1.5, 0);
+    lctx.fill();
+    lctx.restore();
+  }
 }
 
 // =================== CHARACTER PREVIEW ===================
