@@ -355,6 +355,9 @@ document.addEventListener('keydown', e => {
       paused = !paused;
     }
   }
+  if(e.code==='KeyM' || e.key==='m' || e.key==='M'){
+    toggleMusic();
+  }
   if(['Space','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.code)) e.preventDefault();
 });
 document.addEventListener('keyup', e => {
@@ -407,11 +410,441 @@ const bgCtx = bgCanvas.getContext('2d', {alpha:false});
 let bgDirty = true;
 
 // ═══════════════════════════════════════════════════════════════
+//  AUDIO — chiptune 8-bit sintetizado (estilo Moroder)
+//  Cada nivel tiene su propio loop generado en tiempo real.
+// ═══════════════════════════════════════════════════════════════
+let audioCtx = null;
+let masterGain = null;
+let musicMuted = false;
+let currentTrack = null;        // { stopFn, levelKey }
+let musicScheduler = null;       // requestAnimationFrame id
+
+function initAudio(){
+  if(audioCtx) return audioCtx;
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = 0.18;
+    masterGain.connect(audioCtx.destination);
+  } catch(e){ console.warn('Audio no disponible', e); }
+  return audioCtx;
+}
+
+// Notas → frecuencias (escala MIDI)
+function noteFreq(n){ return 440 * Math.pow(2, (n-69)/12); }
+// Helper: nombre de nota a número MIDI
+const NN = { 'C':0,'C#':1,'Db':1,'D':2,'D#':3,'Eb':3,'E':4,'F':5,'F#':6,'Gb':6,'G':7,'G#':8,'Ab':8,'A':9,'A#':10,'Bb':10,'B':11 };
+function nm(name){
+  // ej "C4" → 60, "F#3" → 54
+  const m = name.match(/^([A-G][#b]?)(-?\d+)$/);
+  if(!m) return 60;
+  return NN[m[1]] + (parseInt(m[2])+1) * 12;
+}
+
+// Oscilador 8-bit estilo NES: square (pulse) o triangle, con envolvente ADSR
+function playNote(when, midi, dur, opts){
+  if(!audioCtx || musicMuted) return;
+  opts = opts || {};
+  const type = opts.type || 'square';
+  const vol = opts.vol != null ? opts.vol : 0.5;
+  const osc = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.value = noteFreq(midi);
+  // Envolvente: attack rápido, sustain corto, release breve (estilo 8-bit)
+  const attack = opts.attack || 0.008;
+  const release = opts.release || 0.04;
+  g.gain.setValueAtTime(0, when);
+  g.gain.linearRampToValueAtTime(vol, when + attack);
+  g.gain.setValueAtTime(vol, when + dur - release);
+  g.gain.linearRampToValueAtTime(0, when + dur);
+  osc.connect(g);
+  g.connect(masterGain);
+  osc.start(when);
+  osc.stop(when + dur + 0.02);
+}
+
+// Ruido percusivo (snare/hihat)
+function playNoise(when, dur, opts){
+  if(!audioCtx || musicMuted) return;
+  opts = opts || {};
+  const vol = opts.vol != null ? opts.vol : 0.3;
+  const bufSize = Math.max(1, Math.floor(audioCtx.sampleRate * dur));
+  const buf = audioCtx.createBuffer(1, bufSize, audioCtx.sampleRate);
+  const d = buf.getChannelData(0);
+  for(let i=0;i<bufSize;i++) d[i] = (Math.random()*2 - 1) * (1 - i/bufSize);
+  const src = audioCtx.createBufferSource();
+  src.buffer = buf;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = opts.lp ? 'lowpass' : 'highpass';
+  filter.frequency.value = opts.cutoff || 4000;
+  const g = audioCtx.createGain();
+  g.gain.setValueAtTime(vol, when);
+  g.gain.linearRampToValueAtTime(0, when + dur);
+  src.connect(filter); filter.connect(g); g.connect(masterGain);
+  src.start(when);
+  src.stop(when + dur + 0.01);
+}
+
+// ── DEFINICIÓN DE TRACKS ──
+// Cada track devuelve { bpm, length (compases), arpeggio (16th por compás),
+// bass (8th), pad (notas largas), drums (paso de batería) }
+// Acordes y arpegios diseñados a la Moroder: pulso constante + arpegio rápido.
+
+const TRACKS = {
+  // ───── NIVEL 1 — PRADERA (optimista, mayor, tempo 124) ─────
+  // Acordes: Am - F - C - G (vi-IV-I-V, pop progression alegre)
+  level1: {
+    bpm: 124,
+    bars: 4,
+    pattern: [
+      // bar 1: Am — arpegio A C E A
+      {chord:['A3','C4','E4','A4'], bass:'A2', pad:'A3'},
+      // bar 2: F  — arpegio F A C F
+      {chord:['F3','A3','C4','F4'], bass:'F2', pad:'F3'},
+      // bar 3: C  — arpegio C E G C
+      {chord:['C3','E3','G3','C4'], bass:'C2', pad:'C3'},
+      // bar 4: G  — arpegio G B D G
+      {chord:['G3','B3','D4','G4'], bass:'G2', pad:'G3'},
+    ],
+    drums: 'simple',
+    arpType: 'square'
+  },
+  // ───── NIVEL 2 — CAVERNA (dramático, menor, tempo 108) ─────
+  // Acordes: Dm - Bb - F - A (i-VI-III-V, oscuro y misterioso)
+  level2: {
+    bpm: 108,
+    bars: 4,
+    pattern: [
+      {chord:['D3','F3','A3','D4'], bass:'D2', pad:'D3'},
+      {chord:['Bb2','D3','F3','Bb3'], bass:'Bb1', pad:'Bb2'},
+      {chord:['F3','A3','C4','F4'], bass:'F2', pad:'F3'},
+      {chord:['A3','C#4','E4','A4'], bass:'A2', pad:'A3'},  // V dominante para tensión
+    ],
+    drums: 'sparse',
+    arpType: 'triangle'
+  },
+  // ───── NIVEL 3 — WONDER WIENER (heroico, rápido, 138 bpm) ─────
+  // Acordes: Em - C - G - D (vi-IV-I-V, épico)
+  level3: {
+    bpm: 138,
+    bars: 4,
+    pattern: [
+      {chord:['E3','G3','B3','E4'], bass:'E2', pad:'E3'},
+      {chord:['C3','E3','G3','C4'], bass:'C2', pad:'C3'},
+      {chord:['G3','B3','D4','G4'], bass:'G2', pad:'G3'},
+      {chord:['D3','F#3','A3','D4'], bass:'D2', pad:'D3'},
+    ],
+    drums: 'rock',
+    arpType: 'square'
+  },
+  // ───── NIVEL 4 — NORDELTOPOLIS (épico/glamoroso, 120) ─────
+  // Acordes: Fmaj7 - Em7 - Dm7 - G7 (jazz-pop sofisticado, From Here to Eternity)
+  level4: {
+    bpm: 120,
+    bars: 4,
+    pattern: [
+      {chord:['F3','A3','C4','E4'], bass:'F2', pad:'F3'},
+      {chord:['E3','G3','B3','D4'], bass:'E2', pad:'E3'},
+      {chord:['D3','F3','A3','C4'], bass:'D2', pad:'D3'},
+      {chord:['G3','B3','D4','F4'], bass:'G2', pad:'G3'},
+    ],
+    drums: 'disco',
+    arpType: 'square'
+  },
+  // ───── NIVEL 5 — PANTANO NOCTURNO (oscuro, suspense, lento, 92) ─────
+  // Acordes: Gm - Eb - Bb - F (mi sostenido oscuro)
+  level5: {
+    bpm: 92,
+    bars: 4,
+    pattern: [
+      {chord:['G3','Bb3','D4','G4'], bass:'G2', pad:'G3'},
+      {chord:['Eb3','G3','Bb3','Eb4'], bass:'Eb2', pad:'Eb3'},
+      {chord:['Bb2','D3','F3','Bb3'], bass:'Bb1', pad:'Bb2'},
+      {chord:['F3','A3','C4','F4'], bass:'F2', pad:'F3'},
+    ],
+    drums: 'sparse',
+    arpType: 'triangle'
+  }
+};
+
+// Programa todas las notas de un compás
+function scheduleBar(track, barIdx, startTime){
+  const beat = 60 / track.bpm;        // 1 negra
+  const sixteenth = beat / 4;         // 1 semicorchea
+  const eighth = beat / 2;
+  const bar = track.pattern[barIdx];
+  // ── ARPEGIO de semicorcheas (16 notas por compás) ──
+  // Patrón Moroder: 1-2-3-4-3-2-1-2-1-2-3-4-3-2-1-2 (subida/bajada)
+  const arpPattern = [0,1,2,3, 2,1,0,1, 0,1,2,3, 2,1,0,1];
+  for(let i=0;i<16;i++){
+    const noteName = bar.chord[arpPattern[i]];
+    playNote(startTime + i*sixteenth, nm(noteName), sixteenth*0.95,
+             {type: track.arpType, vol: 0.32, attack: 0.005, release: 0.02});
+  }
+  // ── BAJO en negras (pulso firme) ──
+  for(let i=0;i<4;i++){
+    playNote(startTime + i*beat, nm(bar.bass), beat*0.55,
+             {type: 'square', vol: 0.42, attack: 0.005, release: 0.06});
+    // Octava arriba a la mitad para mover
+    if(i % 2 === 0){
+      playNote(startTime + i*beat + beat*0.5, nm(bar.bass) + 12, beat*0.4,
+               {type: 'square', vol: 0.3, attack: 0.005, release: 0.05});
+    }
+  }
+  // ── PAD (acorde sostenido suave) ──
+  for(const n of bar.chord){
+    playNote(startTime, nm(n) + 0, beat*4 * 0.98,
+             {type: 'triangle', vol: 0.08, attack: 0.1, release: 0.2});
+  }
+  // ── DRUMS ──
+  if(track.drums === 'simple'){
+    // kick en 1 y 3, snare en 2 y 4, hihat en cada eighth
+    for(let i=0;i<4;i++){
+      if(i % 2 === 0){
+        playNoise(startTime + i*beat, 0.04, {vol: 0.5, lp: true, cutoff: 200});
+      } else {
+        playNoise(startTime + i*beat, 0.08, {vol: 0.35, cutoff: 3000});
+      }
+    }
+    for(let i=0;i<8;i++){
+      playNoise(startTime + i*eighth, 0.03, {vol: 0.12, cutoff: 8000});
+    }
+  } else if(track.drums === 'rock'){
+    // más agresivo: kick en 1, 2.5, 3; snare en 2 y 4; hihat 16th
+    for(let i=0;i<4;i++){
+      if(i % 2 === 1){
+        playNoise(startTime + i*beat, 0.08, {vol: 0.4, cutoff: 3000});
+      } else {
+        playNoise(startTime + i*beat, 0.045, {vol: 0.55, lp: true, cutoff: 220});
+      }
+    }
+    // kick extra en off-beat
+    playNoise(startTime + 1.75*beat, 0.04, {vol: 0.4, lp: true, cutoff: 200});
+    playNoise(startTime + 2.75*beat, 0.04, {vol: 0.4, lp: true, cutoff: 200});
+    for(let i=0;i<16;i++){
+      playNoise(startTime + i*sixteenth, 0.02, {vol: 0.1, cutoff: 9000});
+    }
+  } else if(track.drums === 'disco'){
+    // four-on-the-floor — kick en cada negra
+    for(let i=0;i<4;i++){
+      playNoise(startTime + i*beat, 0.05, {vol: 0.5, lp: true, cutoff: 180});
+    }
+    // snare en 2 y 4
+    playNoise(startTime + 1*beat, 0.08, {vol: 0.35, cutoff: 3000});
+    playNoise(startTime + 3*beat, 0.08, {vol: 0.35, cutoff: 3000});
+    // hihat 8th con off-beat acento
+    for(let i=0;i<8;i++){
+      const vol = (i%2===1) ? 0.2 : 0.1;
+      playNoise(startTime + i*eighth, 0.025, {vol, cutoff: 8500});
+    }
+  } else if(track.drums === 'sparse'){
+    // sólo kick en 1, snare en 3 — mucho aire, oscuro
+    playNoise(startTime, 0.06, {vol: 0.5, lp: true, cutoff: 180});
+    playNoise(startTime + 2*beat, 0.1, {vol: 0.3, cutoff: 2500});
+    // hihat suave en 8th
+    for(let i=0;i<8;i++){
+      playNoise(startTime + i*eighth, 0.02, {vol: 0.06, cutoff: 7000});
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SFX — Efectos de sonido del juego
+// ═══════════════════════════════════════════════════════════════
+
+// Función helper para tono con glide (slide de frecuencia)
+function sfxGlide(startFreq, endFreq, dur, opts){
+  if(!audioCtx) return;
+  opts = opts || {};
+  const type = opts.type || 'square';
+  const vol = opts.vol != null ? opts.vol : 0.35;
+  const t0 = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(startFreq, t0);
+  osc.frequency.exponentialRampToValueAtTime(Math.max(1, endFreq), t0 + dur);
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(vol, t0 + 0.005);
+  g.gain.setValueAtTime(vol, t0 + dur*0.7);
+  g.gain.linearRampToValueAtTime(0, t0 + dur);
+  osc.connect(g); g.connect(masterGain || audioCtx.destination);
+  osc.start(t0); osc.stop(t0 + dur + 0.02);
+}
+
+// Tono simple con envolvente
+function sfxTone(freq, dur, opts){
+  if(!audioCtx) return;
+  opts = opts || {};
+  const type = opts.type || 'square';
+  const vol = opts.vol != null ? opts.vol : 0.35;
+  const t0 = audioCtx.currentTime + (opts.delay || 0);
+  const osc = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.value = freq;
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(vol, t0 + 0.005);
+  g.gain.setValueAtTime(vol, t0 + dur*0.6);
+  g.gain.linearRampToValueAtTime(0, t0 + dur);
+  osc.connect(g); g.connect(masterGain || audioCtx.destination);
+  osc.start(t0); osc.stop(t0 + dur + 0.02);
+}
+
+// "WAW" del salto — glide ascendente corto, square+triangle layer
+function sfxJump(){
+  if(!audioCtx || musicMuted) return;
+  // Capa 1: square sliding up
+  sfxGlide(280, 580, 0.13, {type:'square', vol:0.32});
+  // Capa 2: triangle más grave para "warmth" del "waw"
+  sfxGlide(180, 320, 0.15, {type:'triangle', vol:0.28});
+}
+
+// "MIAU" del gatito — dos tonos descendentes con vibrato
+function sfxMeow(){
+  if(!audioCtx || musicMuted) return;
+  // "MI" ascendente
+  sfxGlide(420, 580, 0.10, {type:'sawtooth', vol:0.28});
+  // "AU" descendente largo (después)
+  if(!audioCtx) return;
+  const t0 = audioCtx.currentTime + 0.10;
+  const osc = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  const lfo = audioCtx.createOscillator();
+  const lfoG = audioCtx.createGain();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(580, t0);
+  osc.frequency.exponentialRampToValueAtTime(220, t0 + 0.28);
+  // Vibrato (lfo)
+  lfo.frequency.value = 14;
+  lfoG.gain.value = 25;
+  lfo.connect(lfoG); lfoG.connect(osc.frequency);
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(0.30, t0 + 0.01);
+  g.gain.setValueAtTime(0.30, t0 + 0.22);
+  g.gain.linearRampToValueAtTime(0, t0 + 0.30);
+  osc.connect(g); g.connect(masterGain || audioCtx.destination);
+  osc.start(t0); osc.stop(t0 + 0.32);
+  lfo.start(t0); lfo.stop(t0 + 0.32);
+}
+
+// Bloque roto — ruido + tono grave corto (estilo Mario)
+function sfxBlockBreak(){
+  if(!audioCtx || musicMuted) return;
+  // Ruido seco
+  playNoise(audioCtx.currentTime, 0.18, {vol: 0.4, cutoff: 1500});
+  // Tono grave que cae
+  sfxGlide(220, 110, 0.12, {type:'square', vol:0.3});
+  // Múltiples sub-tonos para sensación de pedazos cayendo
+  sfxTone(180, 0.08, {type:'triangle', vol:0.18, delay:0.06});
+  sfxTone(140, 0.06, {type:'triangle', vol:0.15, delay:0.10});
+  sfxTone(110, 0.05, {type:'triangle', vol:0.12, delay:0.14});
+}
+
+// "YUM" del huesito — dos tonitos rápidos arpegiados (ding-ding alegre)
+function sfxBoneCollect(){
+  if(!audioCtx || musicMuted) return;
+  // Primero un C alto
+  sfxTone(1046, 0.08, {type:'square', vol:0.25});
+  // Después un E alto (tercera mayor)
+  sfxTone(1318, 0.10, {type:'square', vol:0.28, delay:0.06});
+  // Tap de sub-tono "yum"
+  sfxTone(2093, 0.04, {type:'triangle', vol:0.18, delay:0.13});
+}
+
+// Hueso DORADO — más festivo (4 notas en arpegio)
+function sfxGoldenBone(){
+  if(!audioCtx || musicMuted) return;
+  const notes = [659, 784, 988, 1318]; // E5 G5 B5 E6
+  notes.forEach((f, i)=>{
+    sfxTone(f, 0.08, {type:'square', vol:0.28, delay: i*0.05});
+  });
+}
+
+// Vida nueva — fanfarria de arpa triunfal (arpegio ascendente largo + sostenido)
+function sfxOneUp(){
+  if(!audioCtx || musicMuted) return;
+  // Arpegio mayor ascendente estilo arpa (C E G C E G C)
+  const harp = [523, 659, 784, 1046, 1318, 1568, 2093]; // C5 E5 G5 C6 E6 G6 C7
+  harp.forEach((f, i)=>{
+    sfxTone(f, 0.35, {type:'triangle', vol:0.35 - i*0.02, delay: i*0.06});
+    // Capa sutil square para brillo
+    sfxTone(f*2, 0.18, {type:'square', vol:0.07, delay: i*0.06});
+  });
+  // Acorde final sostenido — C mayor
+  sfxTone(1046, 0.6, {type:'triangle', vol:0.32, delay: 0.45});
+  sfxTone(1318, 0.6, {type:'triangle', vol:0.28, delay: 0.45});
+  sfxTone(1568, 0.7, {type:'triangle', vol:0.30, delay: 0.45});
+}
+
+// Daño al jugador / muerte (ya lo necesita el juego)
+function sfxHurt(){
+  if(!audioCtx || musicMuted) return;
+  sfxGlide(440, 110, 0.4, {type:'sawtooth', vol:0.35});
+  playNoise(audioCtx.currentTime, 0.2, {vol: 0.2, cutoff: 800});
+}
+
+// Disparo
+function sfxShoot(){
+  if(!audioCtx || musicMuted) return;
+  sfxGlide(900, 1200, 0.06, {type:'square', vol:0.22});
+  playNoise(audioCtx.currentTime, 0.04, {vol: 0.15, cutoff: 5000});
+}
+
+function startMusic(levelKey){
+  if(!audioCtx) initAudio();
+  if(!audioCtx) return;
+  stopMusic();
+  const track = TRACKS[levelKey];
+  if(!track) return;
+  if(audioCtx.state === 'suspended') audioCtx.resume();
+  const beat = 60 / track.bpm;
+  const barDur = beat * 4;
+  let nextBarTime = audioCtx.currentTime + 0.1;
+  let barIdx = 0;
+  const totalBars = track.bars;
+  let stopped = false;
+
+  function scheduler(){
+    if(stopped) return;
+    while(nextBarTime < audioCtx.currentTime + 0.5){
+      scheduleBar(track, barIdx % totalBars, nextBarTime);
+      nextBarTime += barDur;
+      barIdx++;
+    }
+    musicScheduler = setTimeout(scheduler, 100);
+  }
+  scheduler();
+  currentTrack = {
+    stopFn: ()=>{ stopped = true; if(musicScheduler){ clearTimeout(musicScheduler); musicScheduler=null; } },
+    levelKey
+  };
+}
+
+function stopMusic(){
+  if(currentTrack){
+    currentTrack.stopFn();
+    currentTrack = null;
+  }
+}
+
+function toggleMusic(){
+  musicMuted = !musicMuted;
+  if(musicMuted){ stopMusic(); }
+  else if(level){
+    const key = inSubLevel ? 'level2' : ('level'+level);
+    startMusic(key);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  ARRANQUE
 // ═══════════════════════════════════════════════════════════════
 function startGame(){
   document.getElementById('msg-main').classList.add('hidden');
   document.getElementById('msg').classList.add('hidden');
+  initAudio();  // necesita gesto de usuario (el click ya lo dio)
   lives = 3; bones = 0; shots = 0; playerBullets = [];
   totalBonesEarned = 0; bonesSinceLastLife = 0;
   paused = false;
@@ -459,6 +892,8 @@ function initLevel(lvl){
   else if(lvl===4) buildLevel4();
   else if(lvl===5) buildLevel5();
   hud();
+  // Arrancar track del nivel
+  startMusic('level' + lvl);
 }
 
 function hud(){
@@ -495,6 +930,7 @@ function rewardBone(amount){
     burst(P.x + P.w/2, P.y, '#ff6080', 22, 1.4);
     burst(P.x + P.w/2, P.y, '#ffd34d', 18, 1.2);
     showFloatingText('+1 ♥ EXTRA', P.x + P.w/2, P.y - 10, '#ff80a0');
+    sfxOneUp();
   }
   hud();
 }
@@ -1105,9 +1541,8 @@ function buildLevel3(){
     });
   });
 
-  // ── MURCIÉLAGOS VOLADORES — esquivar saltando o agachándose ──
-  // Vuelan en zigzag horizontal a varias alturas. Se pueden matar saltándoles encima.
-  // No tienen gravedad: type:'fly'
+  // ── GAVIOTAS VOLADORAS — esquivar saltando o disparar ──
+  // Mundo diurno tropical, las gaviotas planean a varias alturas.
   [
     [35, 4], [55, 3], [78, 5], [105, 4], [128, 3],
     [148, 5], [170, 4], [195, 3], [218, 5], [240, 4]
@@ -1115,10 +1550,10 @@ function buildLevel3(){
     const dir = Math.random()>0.5?1:-1;
     enemies.push({
       x:ex*TILE, y:ey*TILE,
-      w:18, h:12,
+      w:22, h:12,
       vx: 1.45*dir, vy:0, dir: dir,
       alive:true, dead:false, deadT:0, fr:0, ft:0,
-      type:'fly', kind:'bat',
+      type:'fly', kind:'seagull',
       baseSpd:1.45,
       jumpT:0,
       onGround:false,
@@ -1567,6 +2002,9 @@ function hitBlock(t){
     burst(t.x+TILE/2, t.y+TILE/2, '#ffd34d', 10);
     burst(t.x+TILE/2, t.y+TILE/2, '#ffffa0', 5);
     cam.shakeT = 6;
+    // Bloque ? activado — sonido pop alegre
+    sfxTone(880, 0.06, {type:'square', vol:0.32});
+    sfxTone(1320, 0.08, {type:'square', vol:0.28, delay:0.05});
   } else if(t.t==='qbLife' && !t.hit){
     t.hit = true;
     items.push({x:t.x+5, y:t.y-2, w:12, h:12, alive:true, ft:0,
@@ -1574,9 +2012,15 @@ function hitBlock(t){
     burst(t.x+TILE/2, t.y+TILE/2, '#ff6080', 14);
     burst(t.x+TILE/2, t.y+TILE/2, '#ffffff', 8);
     cam.shakeT = 10;
+    // Bloque ♥ — sonido más festivo
+    sfxTone(880, 0.06, {type:'square', vol:0.32});
+    sfxTone(1100, 0.06, {type:'square', vol:0.32, delay:0.05});
+    sfxTone(1320, 0.10, {type:'square', vol:0.32, delay:0.10});
   } else if(t.t==='brk'){
     burst(t.x+TILE/2, t.y+TILE/2, '#c85000', 10);
     const i = tiles.indexOf(t); if(i>=0) tiles.splice(i,1);
+    // Bloque roto — sonido característico
+    sfxBlockBreak();
   }
 }
 function burst(x, y, col, n, vscale){
@@ -1635,6 +2079,7 @@ function updatePlayer(){
     P.vy = JUMP_V * P.jumpBoost;
     P.jumping = true;
     burst(P.x+P.w/2, P.y+P.h, '#ffffff', 6);
+    sfxJump();
   }
   jumpTap = false;
 
@@ -1685,6 +2130,7 @@ function updatePlayer(){
       alive:true, life: 75
     });
     burst(P.x + (P.dir>0 ? P.w : 0), P.y+7, '#ffd34d', 4);
+    sfxShoot();
     hud();
   }
   shootTap = false;
@@ -1848,18 +2294,20 @@ function updateEnemies(){
         const hb = {x:e.x+2, y:e.y+2, w:e.w-4, h:e.h-4};
         if(aabb(P, hb)){
           if(P.vy > 0.4 && P.y + P.h < e.y + e.h*0.6){
-            // Aplastar al murciélago
+            // Aplastar al murciélago/gaviota
             e.dead = true; e.deadT = 0;
             e.vy = -3;
             e.vx = 0;
             P.vy = -6.2;
             rewardBone(1);
+            sfxHurt();
             burst(e.x+e.w/2, e.y+4, '#9060c0', 14);
             showFloatingText('+1', e.x+e.w/2, e.y, '#ffd34d');
           } else {
             P.dead = true;
             burst(P.x+P.w/2, P.y+P.h/2, '#ff2020', 16);
             cam.shakeT = 12;
+            sfxHurt();
           }
         }
       }
@@ -1981,6 +2429,8 @@ function updateEnemies(){
         e.vx = 0;
         P.vy = -6.2;
         rewardBone(1);
+        if(e.kind === 'cat') sfxMeow();
+        else sfxHurt();
         const col = e.kind==='squirrel' ? '#d8943c' :
                     e.kind==='capi' ? '#a06030' : '#ffd34d';
         burst(e.x+e.w/2, e.y+4, col, 14);
@@ -1989,6 +2439,7 @@ function updateEnemies(){
         P.dead = true;
         burst(P.x+P.w/2, P.y+P.h/2, '#ff2020', 16);
         cam.shakeT = 12;
+        sfxHurt();
       }
     }
   }
@@ -2094,11 +2545,14 @@ function updateItems(){
           lives++; hud();
           showFloatingText('+1 ♥', c.x, c.y, '#ff80a0');
           burst(c.x+5, c.y, '#ff6080', 16);
+          sfxOneUp();
         } else if(c.golden){
           shots += 5; hud();
           showFloatingText('+5', c.x, c.y, '#ffd34d');
+          sfxGoldenBone();
         } else {
           rewardBone(1);
+          sfxBoneCollect();
         }
       }
       continue;
@@ -2109,12 +2563,14 @@ function updateItems(){
         lives++; hud();
         showFloatingText('+1 ♥', c.x, c.y, '#ff80a0');
         burst(c.x+5, c.y, '#ff6080', 12);
+        sfxOneUp();
       } else if(c.golden){
         shots += 5;
         burst(c.x+5, c.y, '#ffd34d', 10);
         burst(c.x+5, c.y, '#ffffff', 5);
         showFloatingText('+5', c.x, c.y, '#ffd34d');
         hud();
+        sfxGoldenBone();
       } else {
         // Hueso normal: cuenta para el contador "bones" visible
         bones++; totalBonesEarned++; bonesSinceLastLife++;
@@ -2122,6 +2578,9 @@ function updateItems(){
           bonesSinceLastLife -= 100; lives++; bones = 0;
           showFloatingText('+1 ♥ EXTRA', P.x+P.w/2, P.y-10, '#ff80a0');
           burst(P.x+P.w/2, P.y, '#ff6080', 22, 1.4);
+          sfxOneUp();
+        } else {
+          sfxBoneCollect();
         }
         burst(c.x+5, c.y, '#ffd34d', 6);
         hud();
@@ -2171,6 +2630,8 @@ function updatePlayerBullets(){
         b.alive = false;
         e.dead = true; e.deadT = 0;
         rewardBone(1);
+        if(e.kind === 'cat') sfxMeow();
+        else sfxHurt();
         burst(e.x+e.w/2, e.y+e.h/2, '#ffd34d', 12);
         burst(e.x+e.w/2, e.y+e.h/2, '#ffffff', 6);
         break;
@@ -3614,6 +4075,7 @@ function drawEnemy(e){
 
   if(e.kind === 'croc') drawCroc(e, x, y);
   else if(e.kind === 'bat') drawBat(e, x, y);
+  else if(e.kind === 'seagull') drawSeagull(e, x, y);
   else if(e.kind === 'rat') drawRat(e, x, y);
   else if(e.kind === 'capi') drawCapincho(e, x, y);
   else if(e.kind === 'squirrel') drawSquirrel(e, x, y);
@@ -3767,6 +4229,80 @@ function drawSquirrel(e, x, y){
   }
 
   const f = e.fr;
+  // ── COLA GRANDE y peluda (esponjosa) — se dibuja PRIMERO para quedar detrás del cuerpo ──
+  // La dirección de la cola es opuesta al movimiento (apunta hacia atrás)
+  const tailSide = e.vx < 0 ? 1 : -1;        // +1 si va a la izquierda (cola a la derecha), -1 si va a la derecha (cola a la izquierda)
+  const tailBaseX = e.vx < 0 ? x+e.w-2 : x+2;  // punto donde la cola se conecta con el cuerpo
+  const tailBaseY = y+e.h*0.45;
+  // Animación leve de oscilación (la cola se mueve mientras camina)
+  const tailWag = Math.sin(fc*0.18 + (e.breathT||0)) * 0.15;
+
+  // Capa exterior (más oscura) - cola amplia y curvada
+  ctx.fillStyle = '#7a3a08';
+  ctx.beginPath();
+  // Curva de cola tipo "S" hacia arriba y atrás
+  ctx.moveTo(tailBaseX, tailBaseY + 4);
+  ctx.bezierCurveTo(
+    tailBaseX + 6*tailSide, tailBaseY + 2,        // control 1
+    tailBaseX + 9*tailSide, tailBaseY - 6 + tailWag*5,        // control 2
+    tailBaseX + 4*tailSide, tailBaseY - 10 + tailWag*3        // punta de la cola
+  );
+  ctx.bezierCurveTo(
+    tailBaseX + 0*tailSide, tailBaseY - 12 + tailWag*3,
+    tailBaseX - 2*tailSide, tailBaseY - 4,
+    tailBaseX - 1*tailSide, tailBaseY
+  );
+  ctx.closePath();
+  ctx.fill();
+
+  // Capa media (color cuerpo)
+  ctx.fillStyle = '#a86028';
+  ctx.beginPath();
+  ctx.moveTo(tailBaseX, tailBaseY + 3);
+  ctx.bezierCurveTo(
+    tailBaseX + 5*tailSide, tailBaseY + 1,
+    tailBaseX + 7.5*tailSide, tailBaseY - 5 + tailWag*4,
+    tailBaseX + 3*tailSide, tailBaseY - 9 + tailWag*2
+  );
+  ctx.bezierCurveTo(
+    tailBaseX + 0*tailSide, tailBaseY - 10 + tailWag*2,
+    tailBaseX - 1*tailSide, tailBaseY - 3,
+    tailBaseX - 0.5*tailSide, tailBaseY
+  );
+  ctx.closePath();
+  ctx.fill();
+
+  // Capa interna (más clara, brillo de la cola peluda)
+  ctx.fillStyle = '#d0834c';
+  ctx.beginPath();
+  ctx.moveTo(tailBaseX + 1*tailSide, tailBaseY);
+  ctx.bezierCurveTo(
+    tailBaseX + 4*tailSide, tailBaseY - 1,
+    tailBaseX + 5.5*tailSide, tailBaseY - 4 + tailWag*3,
+    tailBaseX + 2*tailSide, tailBaseY - 7 + tailWag*2
+  );
+  ctx.bezierCurveTo(
+    tailBaseX + 1*tailSide, tailBaseY - 7 + tailWag*2,
+    tailBaseX + 0.5*tailSide, tailBaseY - 3,
+    tailBaseX + 1*tailSide, tailBaseY
+  );
+  ctx.closePath();
+  ctx.fill();
+
+  // Pelitos texturados (líneas finas)
+  ctx.strokeStyle = 'rgba(90,40,8,0.5)';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  for(let i=0; i<5; i++){
+    const t = i/4;
+    const sx = tailBaseX + (3 + t*2)*tailSide;
+    const sy = tailBaseY - 2 - t*7 + tailWag*t*3;
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(sx + 2*tailSide, sy - 1);
+  }
+  ctx.stroke();
+
+  // ── CUERPO (encima de la cola, así parece conectada) ──
   // Cuerpo marrón rojizo (ardilla)
   ctx.fillStyle = '#8a4810';
   ctx.fillRect(x+2, y+3, e.w-4, e.h-3);
@@ -3792,17 +4328,6 @@ function drawSquirrel(e, x, y){
   // Naricita
   ctx.fillStyle = '#000';
   ctx.fillRect(x+e.w/2-1, y+5, 2, 1);
-  // Cola GRANDE y peluda (esponjosa)
-  ctx.fillStyle = '#a86028';
-  const tailDir = e.vx < 0 ? 1 : -1;
-  const tailX = e.vx < 0 ? x+e.w-1 : x-5;
-  ctx.beginPath();
-  ctx.ellipse(tailX + 3*tailDir, y+e.h*0.3, 5, 8, 0.4*tailDir, 0, Math.PI*2);
-  ctx.fill();
-  ctx.fillStyle = '#d0834c';
-  ctx.beginPath();
-  ctx.ellipse(tailX + 3*tailDir, y+e.h*0.3, 3, 6, 0.4*tailDir, 0, Math.PI*2);
-  ctx.fill();
   // Patitas
   ctx.fillStyle = '#5a2c08';
   ctx.fillRect(x+3, y+e.h-2+(f?1:0), 3, 2-(f?1:0));
@@ -4200,6 +4725,154 @@ function drawBat(e, x, y){
   ctx.lineTo(x+e.w/2 + 0.5, y+6.5);
   ctx.lineTo(x+e.w/2 + 0.2, y+5.5);
   ctx.fill();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  RENDER — GAVIOTA (niveles diurnos)
+// ═══════════════════════════════════════════════════════════════
+function drawSeagull(e, x, y){
+  if(e.dead){
+    // Cae con alas plegadas
+    ctx.fillStyle = '#dddddd';
+    ctx.fillRect(x+4, y+e.h*0.4, e.w-8, e.h*0.5);
+    ctx.fillStyle = '#ffcc00';
+    ctx.fillRect(x+e.w*0.7, y+e.h*0.55, 3, 1);  // pico
+    ctx.fillStyle = '#000';
+    ctx.fillRect(x+e.w*0.45, y+e.h*0.5, 1, 1);
+    return;
+  }
+
+  // Aleteo (más lento que el murciélago - planeo)
+  const wingPhase = (fc % 28) < 14 ? 0 : 1;  // alas arriba o abajo
+  const wingUp = wingPhase === 0;
+
+  // Flip horizontal (mira al lado del movimiento)
+  ctx.save();
+  if(e.dir < 0){
+    ctx.translate(x + e.w, 0);
+    ctx.scale(-1, 1);
+    x = 0;
+  } else {
+    ctx.translate(x, 0);
+    x = 0;
+  }
+
+  // Sombra suave en el cielo (efecto de luz)
+  ctx.fillStyle = 'rgba(0,0,0,0.08)';
+  ctx.beginPath();
+  ctx.ellipse(x+e.w/2, y+e.h+8, e.w/2, 1.5, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // ── ALAS (blancas con puntas grises) ──
+  // Alas extendidas en gran arco (cada ala es una curva suave)
+  ctx.fillStyle = '#ffffff';
+  if(wingUp){
+    // Alas arriba (planeo - posición clásica de gaviota)
+    // Ala izquierda
+    ctx.beginPath();
+    ctx.moveTo(x+e.w*0.45, y+e.h*0.5);
+    ctx.quadraticCurveTo(x+e.w*0.2, y-2, x-4, y+e.h*0.2);
+    ctx.lineTo(x+2, y+e.h*0.45);
+    ctx.quadraticCurveTo(x+e.w*0.25, y+e.h*0.4, x+e.w*0.45, y+e.h*0.6);
+    ctx.closePath();
+    ctx.fill();
+    // Ala derecha
+    ctx.beginPath();
+    ctx.moveTo(x+e.w*0.55, y+e.h*0.5);
+    ctx.quadraticCurveTo(x+e.w*0.8, y-2, x+e.w+4, y+e.h*0.2);
+    ctx.lineTo(x+e.w-2, y+e.h*0.45);
+    ctx.quadraticCurveTo(x+e.w*0.75, y+e.h*0.4, x+e.w*0.55, y+e.h*0.6);
+    ctx.closePath();
+    ctx.fill();
+    // Puntas grises de las alas
+    ctx.fillStyle = '#7a7a7a';
+    ctx.beginPath();
+    ctx.moveTo(x-4, y+e.h*0.2);
+    ctx.lineTo(x+1, y+e.h*0.3);
+    ctx.lineTo(x-2, y+e.h*0.35);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x+e.w+4, y+e.h*0.2);
+    ctx.lineTo(x+e.w-1, y+e.h*0.3);
+    ctx.lineTo(x+e.w+2, y+e.h*0.35);
+    ctx.fill();
+  } else {
+    // Alas hacia abajo (impulso)
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(x+e.w*0.45, y+e.h*0.5);
+    ctx.quadraticCurveTo(x+e.w*0.2, y+e.h*0.8, x-2, y+e.h*0.95);
+    ctx.lineTo(x+4, y+e.h*0.7);
+    ctx.quadraticCurveTo(x+e.w*0.25, y+e.h*0.6, x+e.w*0.45, y+e.h*0.6);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x+e.w*0.55, y+e.h*0.5);
+    ctx.quadraticCurveTo(x+e.w*0.8, y+e.h*0.8, x+e.w+2, y+e.h*0.95);
+    ctx.lineTo(x+e.w-4, y+e.h*0.7);
+    ctx.quadraticCurveTo(x+e.w*0.75, y+e.h*0.6, x+e.w*0.55, y+e.h*0.6);
+    ctx.closePath();
+    ctx.fill();
+    // Puntas grises
+    ctx.fillStyle = '#7a7a7a';
+    ctx.beginPath();
+    ctx.moveTo(x-2, y+e.h*0.95);
+    ctx.lineTo(x+3, y+e.h*0.8);
+    ctx.lineTo(x, y+e.h*0.85);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x+e.w+2, y+e.h*0.95);
+    ctx.lineTo(x+e.w-3, y+e.h*0.8);
+    ctx.lineTo(x+e.w, y+e.h*0.85);
+    ctx.fill();
+  }
+
+  // ── CUERPO ovalado blanco ──
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.ellipse(x+e.w/2, y+e.h*0.6, e.w*0.3, e.h*0.35, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // ── CABEZA (lado derecho, mira al frente) ──
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(x+e.w*0.75, y+e.h*0.45, e.h*0.28, 0, Math.PI*2);
+  ctx.fill();
+
+  // ── PICO amarillo curvado ──
+  ctx.fillStyle = '#ffb030';
+  ctx.beginPath();
+  ctx.moveTo(x+e.w*0.85, y+e.h*0.4);
+  ctx.lineTo(x+e.w+2, y+e.h*0.5);
+  ctx.lineTo(x+e.w*0.85, y+e.h*0.55);
+  ctx.closePath();
+  ctx.fill();
+  // Manchita roja característica en la punta del pico (gaviota argéntea)
+  ctx.fillStyle = '#dd4020';
+  ctx.fillRect(x+e.w*0.95, y+e.h*0.48, 1.5, 1.5);
+
+  // ── OJO ──
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.arc(x+e.w*0.78, y+e.h*0.4, 1.2, 0, Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(x+e.w*0.78-0.3, y+e.h*0.4-0.3, 0.4, 0.4);
+
+  // ── COLA pequeña gris ──
+  ctx.fillStyle = '#9a9a9a';
+  ctx.beginPath();
+  ctx.moveTo(x+e.w*0.2, y+e.h*0.55);
+  ctx.lineTo(x+e.w*0.05, y+e.h*0.6);
+  ctx.lineTo(x+e.w*0.2, y+e.h*0.7);
+  ctx.fill();
+
+  // ── PATITAS naranjas (apenas visibles) ──
+  ctx.fillStyle = '#ff9020';
+  ctx.fillRect(x+e.w*0.55, y+e.h*0.85, 1.5, 2);
+  ctx.fillRect(x+e.w*0.65, y+e.h*0.85, 1.5, 2);
+
+  ctx.restore();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -5303,6 +5976,7 @@ function showMsg(title, sub, btnLabel, cb){
 
 function showGameOver(){
   loopGo = false;
+  stopMusic();
   const totalBones = totalBonesEarned;
   // ammo + bones reset on full game-over (3 lives lost)
   shots = 0;
@@ -5331,6 +6005,7 @@ function showGameOver(){
 
 function showFinalVictory(){
   loopGo = false;
+  stopMusic();
   const totalBones = totalBonesEarned;
   const heroName = chosenChar === 'wiener' ? 'Wiener' : 'Salchi-Doverman';
   const msg = document.getElementById('msg');
