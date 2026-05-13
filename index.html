@@ -400,6 +400,8 @@ let subLevelUsed = false;     // una sola vez por partida
 let savedMainState = null;    // snapshot del nivel principal al entrar al subnivel
 let worldNum = 1;             // 1, 2 o 3 — selecciona modificadores globales
 let enemySpeedMul = 1.0;      // multiplicador aplicado al baseSpd de todos los enemigos al construir el nivel
+let introT = 0;               // contador del cartel de intro de nivel (0..180+). Congela enemigos hasta 140.
+let powerUpT = 0;             // contador del power-up (hueso dorado mágico). >0 = invencible
 
 // Tiles que el jugador y enemigos consideran sólidos
 const SOLID = new Set(['gnd','brk','qb','qbLife','ptop','pbod','ftop','fbod','sld','stone','dngnd','fall','ice','grassIsle','bridge']);
@@ -1010,6 +1012,8 @@ function initLevel(lvl){
   paused = false;
   levelTransitioning = false;
   playerBullets = [];
+  introT = 0;          // resetear cartel de intro
+  powerUpT = 0;        // resetear power-up al cambiar de nivel
   // Las municiones se conservan al perder vida y al pasar nivel.
   // Solo se resetean al perder las 3 vidas (en showGameOver).
 
@@ -1019,6 +1023,7 @@ function initLevel(lvl){
     w:22, h:18,
     onGround:false, dir:1, dead:false, deadT:0,
     inv:0, wf:0, wt:0, jumping:false, shootCd:0,
+    boosterT: 0,
     char: chosenChar
   };
 
@@ -1119,11 +1124,28 @@ function removeBlockedItems(){
   });
 }
 
+// Marca un bloque qb específico como mágico (contiene hueso de poder).
+// El power-up aparece en: 1-2, 2-4, 3-5.
+function markMagicBlock(){
+  // Solo en estos niveles
+  const targets = {
+    1: 2,   // mundo 1, nivel 2 (caverna)
+    2: 4,   // mundo 2, nivel 4 (nordeltopolis)
+    3: 5    // mundo 3, nivel 5 (pantano final)
+  };
+  if(targets[worldNum] !== level) return;
+  // Encontrar todos los bloques qb (no qbLife)
+  const candidates = tiles.filter(t => t.t === 'qb');
+  if(candidates.length === 0) return;
+  // Marcar el bloque del medio (índice central) — escondido pero alcanzable
+  const target = candidates[(candidates.length / 2)|0];
+  if(target) target.magic = true;
+}
+
 // Aplica modificadores globales del mundo actual a los enemigos ya spawneados.
 // Multiplica baseSpd y vx por enemySpeedMul. Mundos 2 y 3 también añaden:
 //  - ratitas frenéticas (20 por nivel)
 //  - gorriones erráticos (solo mundo 3)
-//  - pasarelas extras (variación de layout)
 function applyWorldModifiers(){
   // 1) Multiplicar velocidades de TODOS los enemigos
   for(const e of enemies){
@@ -1139,10 +1161,8 @@ function applyWorldModifiers(){
   if(worldNum >= 3 && !inSubLevel){
     spawnSparrows(8);
   }
-  // 4) Mundos 2 y 3: pasarelas extras (suspended bridges para variación)
-  if(worldNum >= 2 && !inSubLevel){
-    addExtraBridges();
-  }
+  // 4) Marcar bloque mágico (power-up) si corresponde al nivel
+  if(!inSubLevel) markMagicBlock();
 }
 
 // Spawnea N ratitas frenéticas dispersas. Saltan, corren rápido, patrol enorme.
@@ -1151,13 +1171,31 @@ function spawnFrenzyRats(n){
   let maxX = 0;
   for(const t of tiles) if(t.x > maxX) maxX = t.x;
   const rangeEnd = Math.min(maxX, (window._flagX || maxX) - 4*TILE);
+  // Encontrar tiles sólidos a fila 10 o 11 (potenciales spawn-points seguros)
+  // (evitar spawn sobre agua que las mata inmediato en N4 y N5)
+  const safeSpots = [];
+  for(const t of tiles){
+    if(!SOLID.has(t.t)) continue;
+    if(t.y === 11*TILE || t.y === 10*TILE){
+      // Verificar que no haya otro tile sólido directamente encima (para que la ratita quepa)
+      const upY = t.y - TILE;
+      let blocked = false;
+      for(const t2 of tiles){
+        if(SOLID.has(t2.t) && t2.x === t.x && t2.y === upY){ blocked = true; break; }
+      }
+      if(!blocked) safeSpots.push({x: t.x, y: t.y - 10});
+    }
+  }
+  // Si no hay spots seguros, abortar (no spawn ratitas)
+  if(safeSpots.length === 0) return;
   for(let i=0; i<n; i++){
-    const ex = 10 + ((i*7 + 3) % Math.floor(rangeEnd / TILE - 12));
+    const spot = safeSpots[(i*7 + 3) % safeSpots.length];
+    if(!spot) continue;
     const dir = (i % 2 === 0) ? 1 : -1;
     // Velocidad escalada: mundo 2 = 1.5×base, mundo 3 = 2.0×base
     const baseSpeed = 1.0 * enemySpeedMul;
     enemies.push({
-      x: ex * TILE, y: 10 * TILE,
+      x: spot.x, y: spot.y,
       w: 14, h: 10,
       vx: baseSpeed * dir, vy: 0, dir: dir,
       alive: true, dead: false, deadT: 0, fr: 0, ft: 0,
@@ -1166,7 +1204,7 @@ function spawnFrenzyRats(n){
       jumpT: 30 + (Math.random()*40|0),
       onGround: false,
       breathT: Math.random()*Math.PI*2,
-      homeX: ex * TILE, patrolRange: 999*TILE,  // patrullan todo el mapa
+      homeX: spot.x, patrolRange: 999*TILE,
       tailT: Math.random()*Math.PI*2,
       frenzy: true
     });
@@ -1207,29 +1245,10 @@ function spawnSparrows(n){
 
 // Agrega pasarelas extras (puentes suspendidos) en posiciones genéricas
 // para variar el layout en mundos 2 y 3 sin romper el nivel.
+// DESHABILITADA: las posiciones fijas resultan inaccesibles o tapan saltos críticos.
+// El layout sigue siendo casi idéntico entre mundos como solicitado.
 function addExtraBridges(){
-  // Encontrar pares de plataformas separadas y meter una pasarela en el aire entre ellas.
-  // Estrategia simple: poner pasarelas en posiciones predefinidas que sabemos que están vacías.
-  // Posiciones en tiles globales (filas altas, donde no haya nada).
-  const candidates = [
-    [50, 4], [85, 3], [120, 4], [155, 3], [185, 4],
-    [60, 5], [100, 6], [140, 5], [175, 6]
-  ];
-  candidates.forEach(([tx, ty])=>{
-    // Sólo poner si no hay tile sólido en esa zona (3 de ancho)
-    let collides = false;
-    for(let dx=0; dx<3; dx++){
-      for(const t of tiles){
-        if(t.x === (tx+dx)*TILE && t.y === ty*TILE && SOLID.has(t.t)){
-          collides = true; break;
-        }
-      }
-      if(collides) break;
-    }
-    if(!collides){
-      for(let dx=0; dx<3; dx++) T(tx+dx, ty, 'bridge');
-    }
-  });
+  // intencionalmente vacío
 }
 
 function pipe(tx, h){
@@ -1620,15 +1639,25 @@ function buildLevel2(){
     });
   });
 
-  // ── EL JEFE ──
+  // ── EL JEFE — Gato Rey (M1), Tigre Rey (M2), León Rey (M3) ──
+  const bossHp = worldNum === 1 ? 8 : (worldNum === 2 ? 14 : 22);
+  const bossVariant = worldNum === 1 ? 'cat' : (worldNum === 2 ? 'tiger' : 'lion');
   boss = {
     x:(BOSS_START+11)*TILE, y:9*TILE,
-    w:48, h:36,
-    hp:8, maxHp:8,
-    vx:-1.0, vy:0,
+    w: worldNum === 3 ? 56 : (worldNum === 2 ? 52 : 48),
+    h: worldNum === 3 ? 42 : (worldNum === 2 ? 38 : 36),
+    hp: bossHp, maxHp: bossHp,
+    vx: -1.0 * enemySpeedMul, vy:0,
     alive:true, hit:0, hitFlash:0, fr:0, ft:0,
     angry:false, jumpT:90, phase:1, onGround:false,
-    color:'orange'
+    color:'orange',
+    variant: bossVariant,
+    // Movimiento más natural: oscilación sinusoidal extra + pausas aleatorias
+    moveT: 0,             // contador del estado de movimiento
+    pauseT: 0,            // cuándo va a pausar
+    roarT: 0,             // animación de rugido
+    eyeTrack: 0,          // dirección a la que miran los ojos
+    bobPhase: 0           // respiración corporal
   };
   applyWorldModifiers();
   removeBlockedItems();
@@ -2101,12 +2130,15 @@ function buildLevel5(){
   }
   window._flagX = 187*TILE;
 
-  // ── FRANKIE — salchicha hembra esperando ser rescatada ──
-  // Ubicada en la isla final, justo antes de la bandera
+  // ── PRINCESA — varía por mundo ──
+  //   Mundo 1: Lulu (Bichón Maltés)
+  //   Mundo 2: Turna (Bulldog Francés)
+  //   Mundo 3: Bamby (Salchicha entrada en años, reina madre)
   window._frankie = {
     x: 184*TILE, y: 10*TILE - 16,
-    w: 26, h: 16,
-    bobT: 0, blinkT: 0, rescued: false
+    w: 28, h: 18,
+    bobT: 0, blinkT: 0, rescued: false,
+    variant: worldNum === 1 ? 'lulu' : (worldNum === 2 ? 'turna' : 'bamby')
   };
 
   // ── HUESOS — distribuidos sobre las islas ──
@@ -2226,6 +2258,44 @@ function buildLevel5(){
       homeX: ex*TILE, patrolRange: 14*TILE
     });
   });
+
+  // ── CARPINCHO MADRE — boss final del nivel 5 ──
+  // Patrulla entre las últimas islas (155-180) por agua/tierra.
+  // En mundo 3 también aparece el Padre montado en cocodrilo.
+  const motherHp = worldNum === 1 ? 6 : (worldNum === 2 ? 10 : 14);
+  boss = {
+    x: 165*TILE, y: 10*TILE - 4,
+    w: 56, h: 36,
+    hp: motherHp, maxHp: motherHp,
+    vx: -0.9 * enemySpeedMul, vy: 0,
+    alive:true, hit:0, hitFlash:0, fr:0, ft:0,
+    angry:false, onGround:false,
+    moveT: 0, bobPhase: 0, roarT: 0,
+    variant: 'carpiMother',
+    arenaL: 152*TILE,                    // límites del enfrentamiento
+    arenaR: 184*TILE,
+    inWater: false,
+    diveT: 0,                            // contador de "buceo" (atravesando el agua)
+  };
+  // Bloquear el camino hasta vencer al boss (puerta de tiles hasta isla final)
+  window._bossGate = {
+    x: 181*TILE, y: 7*TILE,
+    w: TILE, h: 4*TILE,
+    open: false
+  };
+  // En mundo 3, además el carpincho PADRE sobre un cocodrilo
+  if(worldNum === 3){
+    boss.father = {
+      x: 158*TILE, y: water.surfaceY - 18,
+      w: 50, h: 24,         // cuerpo (cocodrilo) + jinete (carpincho)
+      hp: 6, maxHp: 6,
+      vx: 1.5 * enemySpeedMul, vy: 0,
+      dir: 1, alive: true, hitFlash: 0,
+      moveT: 0, breathT: 0,
+      patrolMin: 152*TILE, patrolMax: 184*TILE
+    };
+  }
+
   applyWorldModifiers();
   removeBlockedItems();
 }
@@ -2245,6 +2315,16 @@ function resolveX(obj){
     if(aabb(obj, t)){
       if(obj.vx>0) obj.x = t.x - obj.w;
       else obj.x = t.x + t.w;
+      obj.vx = 0;
+    }
+  }
+  // BossGate del nivel 5: bloquea horizontalmente al jugador mientras no se haya vencido al boss
+  if(level === 5 && window._bossGate && !window._bossGate.open && obj === P){
+    const g = window._bossGate;
+    if(aabb(obj, g)){
+      if(obj.vx > 0) obj.x = g.x - obj.w;
+      else if(obj.vx < 0) obj.x = g.x + g.w;
+      else obj.x = g.x - obj.w;  // empujar hacia atrás por defecto
       obj.vx = 0;
     }
   }
@@ -2270,14 +2350,28 @@ function resolveY(obj, onHead){
 function hitBlock(t){
   if(t.t==='qb' && !t.hit){
     t.hit = true;
-    items.push({x:t.x+5, y:t.y-2, w:10, h:10, alive:true, ft:0,
-      popup:true, pvy:-4, ptimer:42, golden:true});
-    burst(t.x+TILE/2, t.y+TILE/2, '#ffd34d', 10);
-    burst(t.x+TILE/2, t.y+TILE/2, '#ffffa0', 5);
-    cam.shakeT = 6;
-    // Bloque ? activado — sonido pop alegre
-    sfxTone(880, 0.06, {type:'square', vol:0.32});
-    sfxTone(1320, 0.08, {type:'square', vol:0.28, delay:0.05});
+    if(t.magic){
+      // BLOQUE MÁGICO: hueso de poder (10 segundos de invencibilidad)
+      items.push({x:t.x+3, y:t.y-2, w:14, h:14, alive:true, ft:0,
+        popup:true, pvy:-4.5, ptimer:60, magicBone:true});
+      burst(t.x+TILE/2, t.y+TILE/2, '#ff40ff', 18);
+      burst(t.x+TILE/2, t.y+TILE/2, '#ffff80', 12);
+      burst(t.x+TILE/2, t.y+TILE/2, '#40d0ff', 10);
+      cam.shakeT = 10;
+      // Sonido especial
+      sfxTone(660, 0.08, {type:'square', vol:0.35});
+      sfxTone(880, 0.08, {type:'square', vol:0.35, delay:0.06});
+      sfxTone(1320, 0.10, {type:'square', vol:0.35, delay:0.12});
+      sfxTone(1760, 0.15, {type:'triangle', vol:0.30, delay:0.20});
+    } else {
+      items.push({x:t.x+5, y:t.y-2, w:10, h:10, alive:true, ft:0,
+        popup:true, pvy:-4, ptimer:42, golden:true});
+      burst(t.x+TILE/2, t.y+TILE/2, '#ffd34d', 10);
+      burst(t.x+TILE/2, t.y+TILE/2, '#ffffa0', 5);
+      cam.shakeT = 6;
+      sfxTone(880, 0.06, {type:'square', vol:0.32});
+      sfxTone(1320, 0.08, {type:'square', vol:0.28, delay:0.05});
+    }
   } else if(t.t==='qbLife' && !t.hit){
     t.hit = true;
     items.push({x:t.x+5, y:t.y-2, w:12, h:12, alive:true, ft:0,
@@ -2335,8 +2429,11 @@ function updatePlayer(){
 
   if(P.inv > 0) P.inv--;
 
-  // Movimiento — ajustes por personaje
-  const accelMul = P.speedBoost;
+  // Movimiento — ajustes por personaje + booster post-disparo
+  // Booster: 0.5s después de disparar, si X sigue presionado, +20% velocidad
+  const boosterActive = P.boosterT > 0 && K.shoot;
+  const boosterMul = boosterActive ? 1.2 : 1.0;
+  const accelMul = P.speedBoost * boosterMul;
   if(K.left){
     P.vx = Math.max(P.vx - (P.onGround?ACCEL:AIR_ACCEL)*accelMul, -MAX_VX*accelMul);
     P.dir = -1;
@@ -2392,9 +2489,11 @@ function updatePlayer(){
 
   // Disparo
   if(P.shootCd > 0) P.shootCd--;
+  if(P.boosterT > 0) P.boosterT--;
   if(shootTap && shots > 0 && P.shootCd === 0){
     shots--;
     P.shootCd = 18;
+    P.boosterT = 30;  // 0.5s a 60fps (booster post-disparo si mantiene X)
     playerBullets.push({
       x: P.x + (P.dir>0 ? P.w+2 : -10),
       y: P.y + 7,
@@ -2501,7 +2600,15 @@ function updateEnemies(){
       // Colisión con jugador
       if(!P.dead && P.inv === 0 && active){
         if(aabb(P, e)){
-          if(P.vy > 0.5 && P.y + P.h < e.y + e.h*0.55){
+          if(powerUpT > 0){
+            // Power-up activo: mata al water enemy también
+            e.dead = true; e.deadT = 0;
+            e.vy = -3;
+            rewardBone(1);
+            sfxHurt();
+            burst(e.x+e.w/2, e.y+e.h/2, '#a06030', 18);
+            burst(e.x+e.w/2, e.y+e.h/2, '#ff40ff', 12);
+          } else if(P.vy > 0.5 && P.y + P.h < e.y + e.h*0.55){
             // Carpincho acuático: rebota pero NO muere
             P.vy = -5.5;
             burst(e.x+e.w/2, e.y, '#88ddff', 8);
@@ -2533,7 +2640,14 @@ function updateEnemies(){
         // hitbox un poco más chica que el sprite
         const hb = {x:e.x+4, y:e.y+2, w:e.w-8, h:e.h-4};
         if(aabb(P, hb)){
-          if(P.vy > 0.5 && P.y + P.h < e.y + e.h*0.5){
+          if(powerUpT > 0){
+            // Power-up: mata al cocodrilo
+            e.dead = true; e.deadT = 0;
+            rewardBone(1);
+            burst(e.x+e.w/2, e.y+e.h/2, '#2d5a30', 20);
+            burst(e.x+e.w/2, e.y+e.h/2, '#ff40ff', 14);
+            sfxHurt();
+          } else if(P.vy > 0.5 && P.y + P.h < e.y + e.h*0.5){
             // Saltar sobre el cocodrilo: rebota pero NO muere (igual que carpincho de agua)
             P.vy = -6;
             burst(e.x+e.w/2, e.y, '#88dd88', 10);
@@ -2583,7 +2697,16 @@ function updateEnemies(){
       if(!P.dead && P.inv === 0 && active){
         const hb = {x:e.x+2, y:e.y+2, w:e.w-4, h:e.h-4};
         if(aabb(P, hb)){
-          if(P.vy > 0.4 && P.y + P.h < e.y + e.h*0.6){
+          if(powerUpT > 0){
+            // Power-up: mata al volador al tocar
+            e.dead = true; e.deadT = 0;
+            e.vy = -3; e.vx = 0;
+            rewardBone(1);
+            sfxHurt();
+            burst(e.x+e.w/2, e.y+4, '#9060c0', 14);
+            burst(e.x+e.w/2, e.y+4, '#ff40ff', 10);
+            showFloatingText('+1', e.x+e.w/2, e.y, '#ff40ff');
+          } else if(P.vy > 0.4 && P.y + P.h < e.y + e.h*0.6){
             // Aplastar al murciélago/gaviota/gorrión
             e.dead = true; e.deadT = 0;
             e.vy = -3;
@@ -2713,7 +2836,20 @@ function updateEnemies(){
     if(P.dead || P.inv > 0) continue;
     const hb = {x:e.x+2, y:e.y+2, w:e.w-4, h:e.h-4};
     if(aabb(P, hb)){
-      if(P.vy > 0.4 && P.y + P.h < e.y + e.h*0.55){
+      // POWER-UP activo: mata al enemigo al tocarlo (cualquier dirección)
+      if(powerUpT > 0){
+        e.dead = true; e.deadT = 0;
+        e.vy = -5;
+        e.vx = e.dir * 2;
+        rewardBone(1);
+        if(e.kind === 'cat') sfxMeow();
+        else sfxHurt();
+        const col = e.kind==='squirrel' ? '#d8943c' :
+                    e.kind==='capi' ? '#a06030' : '#ffd34d';
+        burst(e.x+e.w/2, e.y+e.h/2, col, 18);
+        burst(e.x+e.w/2, e.y+e.h/2, '#ff40ff', 12);
+        showFloatingText('+1', e.x+e.w/2, e.y, '#ff40ff');
+      } else if(P.vy > 0.4 && P.y + P.h < e.y + e.h*0.55){
         e.dead = true; e.deadT = 0;
         e.vy = -3;
         e.vx = 0;
@@ -2744,22 +2880,59 @@ function updateBoss(){
   if(boss.ft > 14){ boss.ft = 0; boss.fr ^= 1; }
   if(boss.hitFlash > 0) boss.hitFlash--;
   boss.angry = boss.hp <= boss.maxHp/2;
+  boss.moveT = (boss.moveT||0) + 1;
+  boss.bobPhase = (boss.bobPhase||0) + 0.06;
+  if(boss.roarT > 0) boss.roarT--;
+
+  // Carpincho madre (nivel 5) — escalado diferente
+  if(level === 5){
+    updateBoss5();
+    return;
+  }
 
   const arenaL = 168*TILE;
   const arenaR = 192*TILE - boss.w;
 
-  const spd = boss.angry ? 2.0 : 1.1;
-  if(boss.x < arenaL + 10) boss.vx = Math.abs(boss.vx);
-  if(boss.x + boss.w > arenaR - 10) boss.vx = -Math.abs(boss.vx);
-  boss.vx = Math.max(-spd, Math.min(spd,
-    boss.vx + ((boss.x < arenaL+10) ? 0.22 : (boss.x+boss.w > arenaR-10) ? -0.22 : 0)));
-  boss.x += boss.vx;
-  boss.x = Math.max(arenaL, Math.min(arenaR, boss.x));
+  // Velocidad base — escala con mundo y enojo
+  const worldSpdMul = worldNum === 1 ? 1.0 : (worldNum === 2 ? 1.25 : 1.5);
+  const spd = (boss.angry ? 2.0 : 1.1) * worldSpdMul;
 
+  // Movimiento más natural: oscilación + pausas ocasionales
+  const inPause = boss.pauseT > 0;
+  if(inPause){
+    boss.pauseT--;
+    boss.vx *= 0.85;  // frenar gradual
+    if(boss.pauseT === 0 && Math.random() < 0.5){
+      // cambio de dirección al salir de pausa
+      boss.vx = (Math.random() > 0.5 ? 1 : -1) * spd * 0.5;
+    }
+  } else {
+    // Cada cierto tiempo (más frecuente cuando angry), iniciar pausa breve para "leer al jugador"
+    if(boss.moveT > (boss.angry ? 90 : 160) + (Math.random()*40|0)){
+      boss.moveT = 0;
+      boss.pauseT = boss.angry ? 12 : 25;
+      boss.roarT = 30;   // mostrar rugido visual
+    }
+    // Persigue al jugador con suavizado (no recto, oscila)
+    const target = P.x;
+    const dx = target - boss.x;
+    const desiredVx = Math.sign(dx) * spd;
+    boss.vx += (desiredVx - boss.vx) * 0.06;
+    // Pequeña oscilación sinusoidal lateral (movimiento "felino")
+    boss.vx += Math.sin(boss.moveT * 0.08) * 0.15;
+  }
+
+  // Rebote en paredes
+  if(boss.x < arenaL + 10){ boss.vx = Math.abs(boss.vx); boss.x = arenaL + 10; }
+  if(boss.x + boss.w > arenaR - 10){ boss.vx = -Math.abs(boss.vx); boss.x = arenaR - 10 - boss.w; }
+  boss.vx = Math.max(-spd, Math.min(spd, boss.vx));
+  boss.x += boss.vx;
+
+  // Saltos más variados (a veces dobles)
   boss.jumpT--;
   if(boss.jumpT <= 0 && boss.onGround){
-    boss.vy = boss.angry ? -11 : -8;
-    boss.jumpT = boss.angry ? 50 : 80;
+    boss.vy = (boss.angry ? -11 : -8) * (worldNum === 3 ? 1.15 : 1.0);
+    boss.jumpT = boss.angry ? (40 + (Math.random()*20|0)) : (70 + (Math.random()*30|0));
     burst(boss.x + boss.w/2, boss.y + boss.h, '#a060ff', 10);
     cam.shakeT = 6;
   }
@@ -2775,12 +2948,27 @@ function updateBoss(){
     }
   }
 
-  if(P.dead || P.inv > 0) return;
+  if(P.dead) return;
+
+  // Power-up activo: matar al boss al tocar
+  if(powerUpT > 0 && aabb(P, boss)){
+    boss.hp = 0;
+    boss.alive = false;
+    burst(boss.x + boss.w/2, boss.y + boss.h/2, '#ffd34d', 60, 1.6);
+    burst(boss.x + boss.w/2, boss.y + boss.h/2, '#ff4040', 36, 1.4);
+    won = true; levelTransitioning = true;
+    cam.shakeT = 24;
+    triggerBossDefeatTransition();
+    return;
+  }
+
+  if(P.inv > 0) return;
   if(aabb(P, boss)){
     if(P.vy > 0.5 && P.y + P.h < boss.y + boss.h*0.4){
       boss.hp--; boss.hitFlash = 18;
       P.vy = -7;
       cam.shakeT = 8;
+      sfxHurt();
       burst(boss.x + boss.w/2, boss.y + 8, '#ff4040', 16);
       if(boss.hp <= 0){
         boss.alive = false;
@@ -2789,18 +2977,500 @@ function updateBoss(){
         burst(boss.x + boss.w/2, boss.y + boss.h/2, '#ff8800', 35, 1.3);
         won = true; levelTransitioning = true;
         cam.shakeT = 24;
-        setTimeout(()=>{
-          showMsg('¡NIVEL 2 COMPLETO!',
-            '¡Venciste al Gato Rey! Próximo: Wonder Wiener',
-            'CONTINUAR',
-            ()=>{ initLevel(3); });
-        }, 1100);
+        triggerBossDefeatTransition();
       }
     } else if(P.inv === 0){
       P.dead = true;
+      sfxHurt();
       burst(P.x+P.w/2, P.y+P.h/2, '#ff2020', 16);
     }
   }
+}
+
+// Mensaje de transición al derrotar al boss de nivel 2 (gato/tigre/león)
+// ═══════════════════════════════════════════════════════════════
+//  BOSS NIVEL 5 — CARPINCHO MADRE (+ Padre sobre cocodrilo en mundo 3)
+//  Se mueve por agua y tierra, salta entre islas. Bloquea el camino
+//  hasta la bandera con un portal de tiles.
+// ═══════════════════════════════════════════════════════════════
+function updateBoss5(){
+  if(!boss || !boss.alive){
+    // Si murió, abrir el portal a la bandera
+    if(window._bossGate && !window._bossGate.open){
+      window._bossGate.open = true;
+    }
+    // Actualizar padre si existe (en mundo 3)
+    if(boss && boss.father && boss.father.alive){
+      updateCarpiFather();
+    }
+    return;
+  }
+  boss.moveT++;
+  boss.bobPhase += 0.05;
+  if(boss.hitFlash > 0) boss.hitFlash--;
+  if(boss.roarT > 0) boss.roarT--;
+  boss.angry = boss.hp <= boss.maxHp/2;
+
+  // Detectar si está en agua o tierra
+  const cy = boss.y + boss.h;
+  boss.inWater = water && cy > water.surfaceY - 2;
+
+  // Movimiento: persigue al jugador con saltos entre islas
+  const worldSpdMul = worldNum === 1 ? 1.0 : (worldNum === 2 ? 1.2 : 1.4);
+  const spd = (boss.angry ? 1.8 : 1.1) * worldSpdMul;
+  const dxToPlayer = P.x - boss.x;
+  const desiredVx = Math.sign(dxToPlayer) * spd;
+  boss.vx += (desiredVx - boss.vx) * 0.05;
+  // Limitar al rango del arena
+  boss.x += boss.vx;
+  if(boss.x < boss.arenaL){ boss.x = boss.arenaL; boss.vx = Math.abs(boss.vx); }
+  if(boss.x + boss.w > boss.arenaR){ boss.x = boss.arenaR - boss.w; boss.vx = -Math.abs(boss.vx); }
+
+  // Gravedad y colisiones con tiles (islas)
+  boss.vy = Math.min(boss.vy + GRAV, MAX_VY);
+  boss.y += boss.vy;
+  boss.onGround = false;
+  for(const t of tiles){
+    if(!SOLID.has(t.t)) continue;
+    if(aabb(boss, t)){
+      if(boss.vy >= 0){ boss.y = t.y - boss.h; boss.vy = 0; boss.onGround = true; }
+      else { boss.y = t.y + t.h; boss.vy = 0; }
+    }
+  }
+
+  // Si está en el agua, flota a la superficie (no se hunde del todo)
+  if(boss.inWater && !boss.onGround){
+    boss.y += (water.surfaceY - boss.h - boss.y) * 0.06;
+    boss.vy *= 0.7;
+  }
+
+  // Saltos entre islas cada cierto tiempo
+  if(boss.onGround && boss.moveT % (boss.angry ? 90 : 130) === 0){
+    boss.vy = boss.angry ? -10 : -8;
+    boss.roarT = 24;
+    burst(boss.x + boss.w/2, boss.y + boss.h, '#a06030', 14);
+    cam.shakeT = 5;
+  }
+
+  // Si está en agua, salto periódico de "buceo" (sale del agua)
+  if(boss.inWater && boss.moveT % 80 === 0 && boss.vy >= -2){
+    boss.vy = -7;
+    burst(boss.x + boss.w/2, water.surfaceY, '#a0c890', 18);
+    burst(boss.x + boss.w/2, water.surfaceY, '#ffffff', 10);
+  }
+
+  // Actualizar Padre (mundo 3)
+  if(boss.father && boss.father.alive){
+    updateCarpiFather();
+  }
+
+  if(P.dead) return;
+
+  // Power-up: matar al boss instantáneo
+  if(powerUpT > 0 && aabb(P, boss)){
+    boss.hp = 0;
+    boss.alive = false;
+    burst(boss.x + boss.w/2, boss.y + boss.h/2, '#ffd34d', 60, 1.6);
+    burst(boss.x + boss.w/2, boss.y + boss.h/2, '#a06030', 36, 1.4);
+    cam.shakeT = 24;
+    if(window._bossGate) window._bossGate.open = true;
+    sfxHurt();
+    return;
+  }
+
+  if(P.inv > 0) return;
+  if(aabb(P, boss)){
+    if(P.vy > 0.5 && P.y + P.h < boss.y + boss.h*0.4){
+      boss.hp--; boss.hitFlash = 18;
+      P.vy = -7;
+      cam.shakeT = 8;
+      sfxHurt();
+      burst(boss.x + boss.w/2, boss.y + 8, '#ff4040', 16);
+      if(boss.hp <= 0){
+        boss.alive = false;
+        burst(boss.x + boss.w/2, boss.y + boss.h/2, '#ffd34d', 50, 1.5);
+        burst(boss.x + boss.w/2, boss.y + boss.h/2, '#a06030', 30, 1.4);
+        cam.shakeT = 24;
+        if(window._bossGate) window._bossGate.open = true;
+      }
+    } else if(P.inv === 0){
+      P.dead = true;
+      sfxHurt();
+      burst(P.x+P.w/2, P.y+P.h/2, '#ff2020', 16);
+    }
+  }
+}
+
+// Padre carpincho sobre cocodrilo (mundo 3)
+function updateCarpiFather(){
+  const f = boss.father;
+  if(!f || !f.alive) return;
+  f.moveT++;
+  f.breathT += 0.06;
+  if(f.hitFlash > 0) f.hitFlash--;
+
+  // Cocodrilo flota en el agua, va y viene en el arena
+  f.y = water.surfaceY - 14 + Math.sin(f.breathT)*1.5;
+  // Velocidad rápida (más que la madre)
+  const spd = 1.8 * enemySpeedMul;
+  f.x += f.dir * spd;
+  if(f.x < f.patrolMin){ f.x = f.patrolMin; f.dir = 1; }
+  if(f.x + f.w > f.patrolMax){ f.x = f.patrolMax - f.w; f.dir = -1; }
+
+  if(P.dead) return;
+
+  // Power-up: matar instantáneo
+  if(powerUpT > 0 && aabb(P, f)){
+    f.alive = false;
+    burst(f.x + f.w/2, f.y + f.h/2, '#a06030', 24, 1.3);
+    burst(f.x + f.w/2, f.y + f.h/2, '#2d5a30', 18, 1.2);
+    sfxHurt();
+    return;
+  }
+
+  if(P.inv > 0) return;
+  if(aabb(P, f)){
+    if(P.vy > 0.5 && P.y + P.h < f.y + f.h*0.4){
+      f.hp--; f.hitFlash = 16;
+      P.vy = -6.5;
+      cam.shakeT = 6;
+      sfxHurt();
+      burst(f.x + f.w/2, f.y + 6, '#ff4040', 12);
+      if(f.hp <= 0){
+        f.alive = false;
+        burst(f.x + f.w/2, f.y + f.h/2, '#a06030', 26, 1.3);
+        burst(f.x + f.w/2, f.y + f.h/2, '#2d5a30', 18, 1.2);
+        cam.shakeT = 14;
+      }
+    } else if(P.inv === 0){
+      P.dead = true;
+      sfxHurt();
+      burst(P.x+P.w/2, P.y+P.h/2, '#ff2020', 14);
+    }
+  }
+}
+
+function drawBoss5(){
+  if(!boss) return;
+
+  // ── PADRE sobre cocodrilo (si existe — mundo 3) ──
+  if(boss.father && boss.father.alive){
+    drawCarpiFather();
+  }
+
+  // ── PORTAL/BARRA (bloquea camino hasta vencer al boss) ──
+  if(window._bossGate && !window._bossGate.open){
+    const g = window._bossGate;
+    const gx = g.x - cam.x;
+    if(gx > -TILE && gx < CW + TILE){
+      // Postes verticales con energía
+      const pulse = 0.5 + Math.sin(fc*0.08)*0.5;
+      // Postes
+      ctx.fillStyle = '#5a3a1a';
+      ctx.fillRect(gx, g.y, 4, g.h);
+      ctx.fillRect(gx + TILE - 4, g.y, 4, g.h);
+      // Energía entre postes
+      ctx.fillStyle = `rgba(160,255,140,${0.4 + pulse*0.4})`;
+      ctx.fillRect(gx + 4, g.y, TILE - 8, g.h);
+      ctx.fillStyle = `rgba(200,255,180,${0.2 + pulse*0.3})`;
+      ctx.fillRect(gx + 4, g.y + 2, TILE - 8, g.h - 4);
+      // Líneas horizontales
+      ctx.strokeStyle = `rgba(255,255,255,${0.5 + pulse*0.4})`;
+      ctx.lineWidth = 1;
+      for(let i=0; i<5; i++){
+        const ly = g.y + 10 + i*15 + Math.sin(fc*0.1 + i)*3;
+        ctx.beginPath();
+        ctx.moveTo(gx + 5, ly);
+        ctx.lineTo(gx + TILE - 5, ly);
+        ctx.stroke();
+      }
+    }
+  }
+
+  if(!boss.alive) return;
+  const x = boss.x - cam.x, y = boss.y;
+  if(x > CW + 80 || x < -80) return;
+  const flash = boss.hitFlash > 0;
+  if(flash) ctx.globalAlpha = 0.45 + Math.abs(Math.sin(fc*0.5))*0.55;
+
+  const bob = Math.sin(boss.bobPhase) * 1.5;
+  const yB = y + bob;
+
+  // Sombra
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.beginPath();
+  ctx.ellipse(x+boss.w/2, y+boss.h+2, boss.w/2-2, 4, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // Salpicaduras si está en agua
+  if(boss.inWater){
+    ctx.strokeStyle = 'rgba(160,220,180,0.6)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(x+boss.w/2, water.surfaceY, boss.w/2 + 5, 3, 0, 0, Math.PI*2);
+    ctx.stroke();
+  }
+
+  // ── CUERPO MADRE — carpincho enorme, paleta agresiva ──
+  const fur = boss.angry ? '#8a4810' : '#a06030';
+  const furD = '#5a2c08';
+  const belly = '#d8a878';
+
+  // Cuerpo grande oval
+  ctx.fillStyle = fur;
+  ctx.beginPath();
+  ctx.roundRect(x, yB + 6, boss.w, boss.h - 6, 8);
+  ctx.fill();
+  // Panza más clara
+  ctx.fillStyle = belly;
+  ctx.fillRect(x + 8, yB + boss.h*0.55, boss.w - 16, boss.h*0.35);
+
+  // Cabeza GRANDE redonda
+  ctx.fillStyle = fur;
+  ctx.beginPath();
+  ctx.roundRect(x + 4, yB, boss.w - 8, 22, 10);
+  ctx.fill();
+
+  // Hocico amplio
+  ctx.fillStyle = furD;
+  ctx.beginPath();
+  ctx.roundRect(x + boss.w*0.3, yB + 12, boss.w*0.4, 10, 4);
+  ctx.fill();
+
+  // Orejitas
+  ctx.fillStyle = furD;
+  ctx.beginPath();
+  ctx.arc(x + 10, yB + 2, 3, 0, Math.PI*2);
+  ctx.arc(x + boss.w - 10, yB + 2, 3, 0, Math.PI*2);
+  ctx.fill();
+  // Interior orejas
+  ctx.fillStyle = '#ff90a0';
+  ctx.beginPath();
+  ctx.arc(x + 10, yB + 2, 1.5, 0, Math.PI*2);
+  ctx.arc(x + boss.w - 10, yB + 2, 1.5, 0, Math.PI*2);
+  ctx.fill();
+
+  // Ojos — más rojos cuando angry
+  const eyeColor = boss.angry ? '#ff2030' : '#1a1a1a';
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(x + 14, yB + 6, 6, 6);
+  ctx.fillRect(x + boss.w - 20, yB + 6, 6, 6);
+  ctx.fillStyle = eyeColor;
+  ctx.beginPath();
+  ctx.arc(x + 17, yB + 9, 2, 0, Math.PI*2);
+  ctx.arc(x + boss.w - 17, yB + 9, 2, 0, Math.PI*2);
+  ctx.fill();
+  // Brillos
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(x + 16, yB + 8, 1, 1);
+  ctx.fillRect(x + boss.w - 18, yB + 8, 1, 1);
+
+  // Cejas enojadas cuando angry
+  if(boss.angry){
+    ctx.strokeStyle = '#3a1808';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x + 12, yB + 4);
+    ctx.lineTo(x + 20, yB + 6);
+    ctx.moveTo(x + boss.w - 20, yB + 6);
+    ctx.lineTo(x + boss.w - 12, yB + 4);
+    ctx.stroke();
+  }
+
+  // Nariz
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillRect(x + boss.w/2 - 3, yB + 16, 6, 3);
+
+  // Boca con dientes — más abierta cuando ruge
+  const mouthOpen = (boss.roarT||0) > 0;
+  if(mouthOpen){
+    ctx.fillStyle = '#5a1818';
+    ctx.fillRect(x + boss.w/2 - 5, yB + 20, 10, 4);
+    // Dientes superiores
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(x + boss.w/2 - 4, yB + 20, 1.5, 2);
+    ctx.fillRect(x + boss.w/2 + 2, yB + 20, 1.5, 2);
+  }
+
+  // Crown / corona naranja de "reina" madre
+  ctx.fillStyle = '#ff8030';
+  ctx.beginPath();
+  ctx.moveTo(x + boss.w/2 - 12, yB - 4);
+  ctx.lineTo(x + boss.w/2 - 8, yB - 10);
+  ctx.lineTo(x + boss.w/2 - 4, yB - 6);
+  ctx.lineTo(x + boss.w/2, yB - 11);
+  ctx.lineTo(x + boss.w/2 + 4, yB - 6);
+  ctx.lineTo(x + boss.w/2 + 8, yB - 10);
+  ctx.lineTo(x + boss.w/2 + 12, yB - 4);
+  ctx.closePath();
+  ctx.fill();
+  // Joya central
+  ctx.fillStyle = '#ff2080';
+  ctx.fillRect(x + boss.w/2 - 1, yB - 9, 2, 2);
+
+  // Patas
+  ctx.fillStyle = furD;
+  const legCycle = Math.sin(boss.moveT * 0.15) * 1.5;
+  ctx.fillRect(x + 6, yB + boss.h - 3 + legCycle, 7, 4);
+  ctx.fillRect(x + boss.w - 13, yB + boss.h - 3 - legCycle, 7, 4);
+
+  if(flash) ctx.globalAlpha = 1;
+
+  // Barra de vida del jefe
+  const hpW = boss.w + 20;
+  const hpX = x - 10;
+  const hpY = y - 22;
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(hpX-1, hpY-1, hpW+2, 8);
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillRect(hpX, hpY, hpW, 6);
+  const hpPct = boss.hp / boss.maxHp;
+  const hpGrad = ctx.createLinearGradient(hpX, hpY, hpX+hpW, hpY);
+  hpGrad.addColorStop(0, hpPct > 0.5 ? '#40ee40' : hpPct > 0.25 ? '#ffd34d' : '#ff4040');
+  hpGrad.addColorStop(1, hpPct > 0.5 ? '#28a028' : hpPct > 0.25 ? '#c89010' : '#a02020');
+  ctx.fillStyle = hpGrad;
+  ctx.fillRect(hpX, hpY, hpW * hpPct, 6);
+}
+
+function drawCarpiFather(){
+  const f = boss.father;
+  if(!f || !f.alive) return;
+  const x = f.x - cam.x, y = f.y;
+  if(x > CW + 80 || x < -80) return;
+  const flash = f.hitFlash > 0;
+  if(flash) ctx.globalAlpha = 0.45 + Math.abs(Math.sin(fc*0.5))*0.55;
+
+  // Sombra
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(x+f.w/2, y+f.h+2, f.w/2-2, 3, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // ── COCODRILO BASE (grande y rápido) ──
+  ctx.fillStyle = '#2d5a30';
+  ctx.beginPath();
+  ctx.roundRect(x + 2, y + 8, f.w - 4, 12, 4);
+  ctx.fill();
+  // Lomo más oscuro con escamas
+  ctx.fillStyle = '#1a3818';
+  ctx.fillRect(x + 4, y + 8, f.w - 8, 4);
+  // Escamas/picos
+  for(let i = 0; i < 6; i++){
+    const sx = x + 8 + i * ((f.w - 16) / 6);
+    ctx.beginPath();
+    ctx.moveTo(sx, y + 8);
+    ctx.lineTo(sx + 2, y + 5);
+    ctx.lineTo(sx + 4, y + 8);
+    ctx.fill();
+  }
+  // Cabeza del cocodrilo (a la derecha si va a la derecha)
+  const hx = f.dir > 0 ? x + f.w - 16 : x;
+  ctx.fillStyle = '#2d5a30';
+  ctx.beginPath();
+  ctx.roundRect(hx, y + 6, 16, 10, 3);
+  ctx.fill();
+  // Mandíbula con dientes
+  ctx.fillStyle = '#1f4220';
+  ctx.fillRect(hx + 2, y + 13, 12, 4);
+  ctx.fillStyle = '#fff';
+  for(let i = 0; i < 4; i++){
+    ctx.beginPath();
+    ctx.moveTo(hx + 3 + i*3, y + 13);
+    ctx.lineTo(hx + 4 + i*3, y + 16);
+    ctx.lineTo(hx + 5 + i*3, y + 13);
+    ctx.fill();
+  }
+  // Ojos amarillos
+  ctx.fillStyle = '#1a3818';
+  ctx.beginPath();
+  ctx.arc(hx + 4, y + 4, 2.5, 0, Math.PI*2);
+  ctx.arc(hx + 11, y + 4, 2.5, 0, Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = '#ffea60';
+  ctx.beginPath();
+  ctx.arc(hx + 4, y + 4, 1.6, 0, Math.PI*2);
+  ctx.arc(hx + 11, y + 4, 1.6, 0, Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = '#000';
+  ctx.fillRect(hx + 3.5, y + 3, 1, 2.5);
+  ctx.fillRect(hx + 10.5, y + 3, 1, 2.5);
+
+  // ── CARPINCHO PADRE encima del cocodrilo ──
+  const cx = x + f.w/2 - 10;
+  const cy = y - 14;
+  // Cuerpo
+  ctx.fillStyle = '#94642a';
+  ctx.beginPath();
+  ctx.roundRect(cx, cy + 4, 20, 12, 4);
+  ctx.fill();
+  // Panza
+  ctx.fillStyle = '#c08850';
+  ctx.fillRect(cx + 2, cy + 11, 16, 4);
+  // Cabeza
+  ctx.fillStyle = '#8a5824';
+  ctx.beginPath();
+  ctx.roundRect(cx + 2, cy, 16, 8, 3);
+  ctx.fill();
+  // Hocico
+  ctx.fillStyle = '#704418';
+  ctx.fillRect(cx + 7, cy + 5, 6, 3);
+  // Ojos enojados
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(cx + 5, cy + 2, 2, 2);
+  ctx.fillRect(cx + 13, cy + 2, 2, 2);
+  ctx.fillStyle = '#ff2020';
+  ctx.fillRect(cx + 5.5, cy + 2.5, 1.2, 1.2);
+  ctx.fillRect(cx + 13.5, cy + 2.5, 1.2, 1.2);
+  // Cejas enojadas
+  ctx.strokeStyle = '#3a1808';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(cx + 4, cy + 1); ctx.lineTo(cx + 7, cy + 2.5);
+  ctx.moveTo(cx + 13, cy + 2.5); ctx.lineTo(cx + 16, cy + 1);
+  ctx.stroke();
+  // Bigote tipo "padre" debajo del hocico
+  ctx.strokeStyle = '#3a2008';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(cx + 6, cy + 8); ctx.lineTo(cx + 14, cy + 8);
+  ctx.stroke();
+  // Sombrero/corona del padre
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillRect(cx + 4, cy - 4, 12, 3);
+  ctx.fillRect(cx + 6, cy - 7, 8, 4);
+
+  if(flash) ctx.globalAlpha = 1;
+
+  // Barra de vida pequeña
+  const hpW = f.w + 10;
+  const hpX = x - 5;
+  const hpY = y - 28;
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(hpX-1, hpY-1, hpW+2, 6);
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillRect(hpX, hpY, hpW, 4);
+  const hpPct = f.hp / f.maxHp;
+  ctx.fillStyle = hpPct > 0.5 ? '#40ee40' : hpPct > 0.25 ? '#ffd34d' : '#ff4040';
+  ctx.fillRect(hpX, hpY, hpW * hpPct, 4);
+}
+
+function triggerBossDefeatTransition(){
+  const bossName = worldNum === 1 ? 'Gato Rey' : (worldNum === 2 ? 'Tigre Rey' : 'León Rey');
+  const subtitle = '¡Venciste al ' + bossName + '!';
+  setTimeout(()=>{
+    if(level < 5){
+      const nextLvl = level + 1;
+      showMsg('¡MUNDO ' + worldNum + '-' + level + ' COMPLETO!',
+        subtitle + ' Próximo: nivel ' + nextLvl,
+        'CONTINUAR',
+        ()=>{ initLevel(nextLvl); });
+    } else {
+      showMsg('¡MUNDO ' + worldNum + '-' + level + ' COMPLETO!',
+        subtitle,
+        'CONTINUAR',
+        ()=>{ initLevel(level + 1 > 5 ? 1 : level + 1); });
+    }
+  }, 1100);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2849,7 +3519,21 @@ function updateItems(){
     }
     if(!P.dead && aabb(P, c)){
       c.alive = false;
-      if(c.lifeBonus){
+      if(c.magicBone){
+        // POWER-UP: 10 segundos de invulnerabilidad + capa roja + antiparras
+        powerUpT = 600;  // 60fps × 10s
+        burst(c.x+7, c.y, '#ff40ff', 24, 1.4);
+        burst(c.x+7, c.y, '#ffff80', 18, 1.3);
+        burst(c.x+7, c.y, '#40d0ff', 14, 1.2);
+        showFloatingText('★ ¡SUPER PERRO! 10s ★', P.x+P.w/2, P.y-14, '#ff40ff');
+        cam.shakeT = 12;
+        // Sonido épico de power-up (arpegio ascendente)
+        sfxTone(523, 0.10, {type:'square', vol:0.32});
+        sfxTone(659, 0.10, {type:'square', vol:0.32, delay:0.06});
+        sfxTone(784, 0.10, {type:'square', vol:0.32, delay:0.12});
+        sfxTone(1046, 0.15, {type:'square', vol:0.36, delay:0.18});
+        sfxTone(1318, 0.20, {type:'triangle', vol:0.36, delay:0.26});
+      } else if(c.lifeBonus){
         lives++; hud();
         showFloatingText('+1 ♥', c.x, c.y, '#ff80a0');
         burst(c.x+5, c.y, '#ff6080', 12);
@@ -3250,7 +3934,8 @@ function drawTile(t){
     case 'qb':
     case 'qbLife': {
       const h = t.hit;
-      const isLife = t.t === 'qbLife';
+      // AMBOS tipos (qb y qbLife) se ven IGUAL para esconder la vida.
+      // La diferencia se revela al golpearlos.
       if(h){
         const g = ctx.createLinearGradient(x, y, x, y+TILE);
         g.addColorStop(0, '#a04018'); g.addColorStop(1, '#5a2008');
@@ -3258,13 +3943,12 @@ function drawTile(t){
       } else {
         const pulse = 0.5 + Math.sin(fc*0.08 + t.x*0.01)*0.5;
         const g = ctx.createLinearGradient(x, y, x, y+TILE);
-        if(isLife){
-          g.addColorStop(0, '#ff6080'); g.addColorStop(0.5, '#ff80a0'); g.addColorStop(1, '#a83050');
-        } else {
-          g.addColorStop(0, '#ffe060'); g.addColorStop(0.5, '#ffd33a'); g.addColorStop(1, '#c89010');
-        }
+        // Color dorado naranja Bitcoin
+        g.addColorStop(0, '#ffae3a');
+        g.addColorStop(0.5, '#f7931a');   // color oficial Bitcoin
+        g.addColorStop(1, '#a05a05');
         ctx.fillStyle = g;
-        ctx.shadowColor = isLife ? 'rgba(255,100,140,'+(0.4+pulse*0.3)+')' : 'rgba(255,210,80,'+(0.3+pulse*0.3)+')';
+        ctx.shadowColor = 'rgba(247,147,26,'+(0.35+pulse*0.3)+')';
         ctx.shadowBlur = 8;
       }
       ctx.fillRect(x, y, TILE, TILE);
@@ -3274,10 +3958,18 @@ function drawTile(t){
       ctx.fillStyle = 'rgba(0,0,0,0.3)';
       ctx.fillRect(x+1, y+TILE-3, TILE-2, 2);
       if(!h){
+        // Símbolo Bitcoin ₿ — dibujado con primitivas para que se vea limpio
         ctx.fillStyle = '#fff';
-        ctx.font = 'bold 14px sans-serif';
+        ctx.font = 'bold 13px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText(isLife ? '♥' : '?', x+TILE/2, y+TILE-5);
+        // Dibujamos una B con doble barra vertical superior e inferior (símbolo Bitcoin)
+        const cx = x + TILE/2;
+        const cy = y + TILE/2;
+        // Cuerpo de la B
+        ctx.fillText('B', cx, cy + 5);
+        // Barras verticales arriba y abajo (la marca Bitcoin)
+        ctx.fillRect(cx - 1.5, cy - 8, 1.5, 3);   // barra superior
+        ctx.fillRect(cx - 1.5, cy + 5, 1.5, 3);   // barra inferior
         ctx.textAlign = 'left';
       }
       break;
@@ -4350,6 +5042,85 @@ function drawDog(wx, wy){
   if(level === 3 && window._skateboard && window._skateboard.collected){
     drawSkateBoardOnDog(x, y);
   }
+
+  // POWER-UP: capa roja flotante + antiparras rojo/azul
+  if(powerUpT > 0){
+    const blink = powerUpT < 90 ? ((fc/4|0) % 2 === 0) : true;  // parpadea al final
+    if(blink){
+      // ── CAPA ROJA detrás del perro ──
+      // Posicionada en la grupa, ondulando con el movimiento
+      const capeWave = Math.sin(fc*0.18) * 2;
+      const capeX = x + (d > 0 ? 2 : P.w - 4);
+      const capeY = y + 4;
+      ctx.fillStyle = '#cc1818';
+      ctx.beginPath();
+      ctx.moveTo(capeX, capeY);
+      ctx.lineTo(capeX - d*8 + capeWave, capeY + 4);
+      ctx.lineTo(capeX - d*10 + capeWave, capeY + 14);
+      ctx.lineTo(capeX - d*6, capeY + 16);
+      ctx.lineTo(capeX - d*3, capeY + 10);
+      ctx.lineTo(capeX, capeY + 8);
+      ctx.closePath();
+      ctx.fill();
+      // Borde de la capa más oscuro
+      ctx.fillStyle = '#8a1010';
+      ctx.beginPath();
+      ctx.moveTo(capeX - d*8 + capeWave, capeY + 4);
+      ctx.lineTo(capeX - d*10 + capeWave, capeY + 14);
+      ctx.lineTo(capeX - d*7 + capeWave*0.5, capeY + 13);
+      ctx.lineTo(capeX - d*6 + capeWave*0.5, capeY + 4);
+      ctx.closePath();
+      ctx.fill();
+      // Brillo en la capa (estrella amarilla)
+      ctx.fillStyle = '#ffd34d';
+      ctx.fillRect(capeX - d*6, capeY + 9, 1.5, 1.5);
+
+      // ── ANTIPARRAS (gafas) rojo/azul sobre los ojos del perro ──
+      // Encontrar la posición de la cabeza/ojos
+      const headX = x + (d > 0 ? P.w - 9 : 0);
+      const headY = y + 2;
+      // Lente izquierda (rojo)
+      ctx.fillStyle = '#ff2030';
+      ctx.beginPath();
+      ctx.arc(headX + 2, headY + 2, 2.2, 0, Math.PI*2);
+      ctx.fill();
+      // Lente derecha (azul)
+      ctx.fillStyle = '#2080ff';
+      ctx.beginPath();
+      ctx.arc(headX + 6, headY + 2, 2.2, 0, Math.PI*2);
+      ctx.fill();
+      // Marco oscuro
+      ctx.strokeStyle = '#1a1a1a';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.arc(headX + 2, headY + 2, 2.2, 0, Math.PI*2);
+      ctx.arc(headX + 6, headY + 2, 2.2, 0, Math.PI*2);
+      ctx.stroke();
+      // Puente entre lentes
+      ctx.beginPath();
+      ctx.moveTo(headX + 4, headY + 2);
+      ctx.lineTo(headX + 4, headY + 2.5);
+      ctx.stroke();
+      // Reflejos blancos
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(headX + 1, headY + 1, 0.8, 0.8);
+      ctx.fillRect(headX + 5, headY + 1, 0.8, 0.8);
+
+      // Aura mágica alrededor (partículas)
+      if(fc % 4 === 0){
+        const ang = Math.random() * Math.PI * 2;
+        const r = 16 + Math.random()*4;
+        parts.push({
+          x: P.x + P.w/2 + Math.cos(ang)*r,
+          y: P.y + P.h/2 + Math.sin(ang)*r,
+          vx: Math.cos(ang)*0.5,
+          vy: Math.sin(ang)*0.5 - 0.3,
+          col: Math.random() > 0.5 ? '#ff40ff' : '#40d0ff',
+          life: 20, ml: 24, sz: 2
+        });
+      }
+    }
+  }
 }
 
 function drawSkateBoardOnDog(x, y){
@@ -5407,10 +6178,17 @@ function drawRat(e, x, y){
 
 function drawBoss(){
   if(!boss || !boss.alive) return;
+  // Nivel 5: dispatch al carpincho madre
+  if(level === 5){ drawBoss5(); return; }
+
   const x = boss.x - cam.x, y = boss.y;
   if(x > CW + 80 || x < -80) return;
   const flash = boss.hitFlash > 0;
   if(flash) ctx.globalAlpha = 0.45 + Math.abs(Math.sin(fc*0.5))*0.55;
+
+  // Respiración (bob sutil) para que no parezca estático
+  const bob = Math.sin(boss.bobPhase || 0) * 1.2;
+  const yB = y + bob;
 
   // Sombra
   ctx.fillStyle = 'rgba(0,0,0,0.4)';
@@ -5418,89 +6196,211 @@ function drawBoss(){
   ctx.ellipse(x+boss.w/2, y+boss.h+2, boss.w/2-2, 4, 0, 0, Math.PI*2);
   ctx.fill();
 
-  // Cuerpo grande naranja (Gato Rey)
-  const fur = boss.angry ? '#d8501c' : '#e88030';
-  const furD = '#a04018';
-  const belly = '#fff0c0';
+  // ── Paleta según variante ──
+  let fur, furD, belly, stripeColor = null, maneColor = null;
+  if(boss.variant === 'tiger'){
+    fur = boss.angry ? '#e07028' : '#f08a30';
+    furD = '#a04818';
+    belly = '#fff0c0';
+    stripeColor = '#2a1810';   // rayas oscuras
+  } else if(boss.variant === 'lion'){
+    fur = boss.angry ? '#d8a040' : '#e8b850';
+    furD = '#a07820';
+    belly = '#fff4d0';
+    maneColor = boss.angry ? '#7a3010' : '#a04818';
+  } else {
+    // gato rey clásico (mundo 1)
+    fur = boss.angry ? '#d8501c' : '#e88030';
+    furD = '#a04018';
+    belly = '#fff0c0';
+  }
 
-  // Cuerpo
+  // ── MELENA (sólo león, detrás del cuerpo) ──
+  if(maneColor){
+    ctx.fillStyle = maneColor;
+    // Forma de "sol" alrededor de la cabeza
+    const mcx = x + boss.w/2;
+    const mcy = yB + 12;
+    const mr = boss.w * 0.55;
+    // 12 puntas de melena con leve movimiento
+    for(let i=0;i<14;i++){
+      const ang = (i/14) * Math.PI*2 + Math.sin(boss.bobPhase + i*0.3)*0.04;
+      const r1 = mr * (0.9 + Math.sin(i*2.3) * 0.15);
+      const x1 = mcx + Math.cos(ang) * r1;
+      const y1 = mcy + Math.sin(ang) * r1 * 0.85;
+      const x2 = mcx + Math.cos(ang - 0.18) * (mr * 0.55);
+      const y2 = mcy + Math.sin(ang - 0.18) * (mr * 0.55) * 0.85;
+      const x3 = mcx + Math.cos(ang + 0.18) * (mr * 0.55);
+      const y3 = mcy + Math.sin(ang + 0.18) * (mr * 0.55) * 0.85;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.lineTo(x3, y3);
+      ctx.fill();
+    }
+    // Disco central de melena
+    ctx.beginPath();
+    ctx.arc(mcx, mcy, mr * 0.6, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  // ── Cuerpo ──
   ctx.fillStyle = fur;
   ctx.beginPath();
-  ctx.roundRect(x, y+8, boss.w, boss.h-8, 6);
+  ctx.roundRect(x, yB+8, boss.w, boss.h-8, 6);
   ctx.fill();
   // Cabeza grande
   ctx.beginPath();
-  ctx.roundRect(x+2, y, boss.w-4, 22, 8);
+  ctx.roundRect(x+2, yB, boss.w-4, 22, 8);
   ctx.fill();
   // Panza
   ctx.fillStyle = belly;
-  ctx.fillRect(x+8, y+18, boss.w-16, boss.h-22);
+  ctx.fillRect(x+8, yB+18, boss.w-16, boss.h-22);
+
+  // ── RAYAS de tigre ──
+  if(stripeColor){
+    ctx.fillStyle = stripeColor;
+    // Rayas en el cuerpo
+    [0.2, 0.4, 0.6, 0.8].forEach(rp => {
+      const sx = x + boss.w*rp;
+      ctx.beginPath();
+      ctx.moveTo(sx, yB+10);
+      ctx.quadraticCurveTo(sx + 2, yB + 18, sx - 1, yB + 26);
+      ctx.lineTo(sx + 2, yB + 26);
+      ctx.quadraticCurveTo(sx + 5, yB + 18, sx + 3, yB + 10);
+      ctx.fill();
+    });
+    // Rayas en la cabeza (frente)
+    [0.25, 0.5, 0.75].forEach(rp => {
+      const sx = x + boss.w*rp;
+      ctx.fillRect(sx, yB+2, 1.5, 6);
+    });
+  }
 
   // Orejas grandes
   ctx.fillStyle = fur;
   ctx.beginPath();
-  ctx.moveTo(x+3, y+3); ctx.lineTo(x+1, y-8); ctx.lineTo(x+10, y+1); ctx.fill();
+  ctx.moveTo(x+3, yB+3); ctx.lineTo(x+1, yB-8); ctx.lineTo(x+10, yB+1); ctx.fill();
   ctx.beginPath();
-  ctx.moveTo(x+boss.w-10, y+1); ctx.lineTo(x+boss.w-1, y-8); ctx.lineTo(x+boss.w-3, y+3); ctx.fill();
+  ctx.moveTo(x+boss.w-10, yB+1); ctx.lineTo(x+boss.w-1, yB-8); ctx.lineTo(x+boss.w-3, yB+3); ctx.fill();
   // Interior orejas
   ctx.fillStyle = '#ff80a0';
-  ctx.fillRect(x+4, y-3, 3, 4);
-  ctx.fillRect(x+boss.w-7, y-3, 3, 4);
+  ctx.fillRect(x+4, yB-3, 3, 4);
+  ctx.fillRect(x+boss.w-7, yB-3, 3, 4);
 
-  // Corona
-  ctx.fillStyle = '#ffd34d';
-  ctx.beginPath();
-  ctx.moveTo(x+10, y-5);
-  ctx.lineTo(x+14, y-12);
-  ctx.lineTo(x+18, y-7);
-  ctx.lineTo(x+22, y-13);
-  ctx.lineTo(x+26, y-7);
-  ctx.lineTo(x+30, y-12);
-  ctx.lineTo(x+34, y-5);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = '#ff4040';
-  ctx.fillRect(x+13, y-9, 3, 3);
-  ctx.fillStyle = '#40e0ff';
-  ctx.fillRect(x+22, y-10, 3, 3);
-  ctx.fillStyle = '#40ff60';
-  ctx.fillRect(x+30, y-9, 3, 3);
-
-  // Ojos malvados (rojos si angry)
-  const eyeColor = boss.angry ? '#ff0040' : '#ffeb50';
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(x+8, y+6, 8, 8);
-  ctx.fillRect(x+boss.w-16, y+6, 8, 8);
-  ctx.fillStyle = eyeColor;
-  ctx.fillRect(x+10, y+8, 5, 5);
-  ctx.fillRect(x+boss.w-14, y+8, 5, 5);
-  ctx.fillStyle = '#000';
-  ctx.fillRect(x+11, y+8, 3, 5);
-  ctx.fillRect(x+boss.w-13, y+8, 3, 5);
-
-  // Boca con dientes
-  ctx.fillStyle = '#a02020';
-  ctx.fillRect(x+boss.w/2-7, y+15, 14, 5);
-  ctx.fillStyle = '#fff';
-  ctx.beginPath();
-  ctx.moveTo(x+boss.w/2-6, y+15); ctx.lineTo(x+boss.w/2-4, y+19); ctx.lineTo(x+boss.w/2-2, y+15); ctx.fill();
-  ctx.beginPath();
-  ctx.moveTo(x+boss.w/2+2, y+15); ctx.lineTo(x+boss.w/2+4, y+19); ctx.lineTo(x+boss.w/2+6, y+15); ctx.fill();
-
-  // Patas
-  ctx.fillStyle = furD;
-  ctx.fillRect(x+3, y+boss.h-2+(boss.fr?1:0), 6, 4-(boss.fr?1:0));
-  ctx.fillRect(x+boss.w-9, y+boss.h-2+(boss.fr?0:1), 6, 4-(boss.fr?0:1));
-
-  // Cola
-  ctx.fillStyle = fur;
-  const tailWag = Math.sin(fc*0.06)*4;
-  if(boss.vx < 0){
-    ctx.fillRect(x+boss.w-2, y+boss.h-12+tailWag, 5, 4);
-    ctx.fillRect(x+boss.w+3, y+boss.h-15+tailWag, 4, 4);
+  // ── Corona (gato/tigre) o "rey" sin corona (león ya tiene melena) ──
+  if(boss.variant !== 'lion'){
+    ctx.fillStyle = '#ffd34d';
+    ctx.beginPath();
+    ctx.moveTo(x+10, yB-5);
+    ctx.lineTo(x+14, yB-12);
+    ctx.lineTo(x+18, yB-7);
+    ctx.lineTo(x+boss.w/2, yB-13);
+    ctx.lineTo(x+boss.w-18, yB-7);
+    ctx.lineTo(x+boss.w-14, yB-12);
+    ctx.lineTo(x+boss.w-10, yB-5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#ff4040';
+    ctx.fillRect(x+13, yB-9, 3, 3);
+    ctx.fillStyle = '#40e0ff';
+    ctx.fillRect(x+boss.w/2-1, yB-10, 3, 3);
+    ctx.fillStyle = '#40ff60';
+    ctx.fillRect(x+boss.w-15, yB-9, 3, 3);
   } else {
-    ctx.fillRect(x-3, y+boss.h-12+tailWag, 5, 4);
-    ctx.fillRect(x-7, y+boss.h-15+tailWag, 4, 4);
+    // León: corona dorada minimalista sobre la melena
+    ctx.fillStyle = '#ffd34d';
+    ctx.beginPath();
+    ctx.moveTo(x+boss.w/2 - 10, yB - 10);
+    ctx.lineTo(x+boss.w/2 - 6, yB - 16);
+    ctx.lineTo(x+boss.w/2, yB - 12);
+    ctx.lineTo(x+boss.w/2 + 6, yB - 16);
+    ctx.lineTo(x+boss.w/2 + 10, yB - 10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#ff4040';
+    ctx.fillRect(x+boss.w/2-1, yB-14, 2, 2);
+  }
+
+  // Ojos malvados — varían según el rugido (parpadeo)
+  const roaring = (boss.roarT || 0) > 0;
+  const eyeColor = boss.angry ? '#ff0040' : (boss.variant === 'lion' ? '#ffea50' : '#ffeb50');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(x+8, yB+6, 8, 8);
+  ctx.fillRect(x+boss.w-16, yB+6, 8, 8);
+  ctx.fillStyle = eyeColor;
+  ctx.fillRect(x+10, yB+8, 5, 5);
+  ctx.fillRect(x+boss.w-14, yB+8, 5, 5);
+  ctx.fillStyle = '#000';
+  // Pupilas vertical (rasgo felino)
+  ctx.fillRect(x+11, yB+8, 2, 5);
+  ctx.fillRect(x+boss.w-13, yB+8, 2, 5);
+
+  // Boca con dientes (más abierta cuando ruge)
+  ctx.fillStyle = '#a02020';
+  const mouthH = roaring ? 9 : 5;
+  ctx.fillRect(x+boss.w/2-7, yB+15, 14, mouthH);
+  ctx.fillStyle = '#fff';
+  // Dientes superiores
+  ctx.beginPath();
+  ctx.moveTo(x+boss.w/2-6, yB+15); ctx.lineTo(x+boss.w/2-4, yB+15+mouthH-1); ctx.lineTo(x+boss.w/2-2, yB+15); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(x+boss.w/2+2, yB+15); ctx.lineTo(x+boss.w/2+4, yB+15+mouthH-1); ctx.lineTo(x+boss.w/2+6, yB+15); ctx.fill();
+  // Colmillos extra para tigre y león
+  if(boss.variant !== 'cat' && roaring){
+    ctx.beginPath();
+    ctx.moveTo(x+boss.w/2-5, yB+15+mouthH); ctx.lineTo(x+boss.w/2-3, yB+15); ctx.lineTo(x+boss.w/2-1, yB+15+mouthH); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x+boss.w/2+1, yB+15+mouthH); ctx.lineTo(x+boss.w/2+3, yB+15); ctx.lineTo(x+boss.w/2+5, yB+15+mouthH); ctx.fill();
+  }
+
+  // Bigotes
+  ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(x+boss.w/2 - 8, yB+18); ctx.lineTo(x-2, yB+17);
+  ctx.moveTo(x+boss.w/2 - 8, yB+19); ctx.lineTo(x-2, yB+21);
+  ctx.moveTo(x+boss.w/2 + 8, yB+18); ctx.lineTo(x+boss.w+2, yB+17);
+  ctx.moveTo(x+boss.w/2 + 8, yB+19); ctx.lineTo(x+boss.w+2, yB+21);
+  ctx.stroke();
+
+  // Patas — animación de paso más fluida con sin
+  const legCycle = Math.sin(boss.moveT * 0.18) * 1.5;
+  ctx.fillStyle = furD;
+  ctx.fillRect(x+3, yB+boss.h-2 + legCycle, 6, 4 - Math.abs(legCycle));
+  ctx.fillRect(x+boss.w-9, yB+boss.h-2 - legCycle, 6, 4 - Math.abs(legCycle));
+
+  // Cola (con copete oscuro para león)
+  ctx.fillStyle = fur;
+  const tailWag = Math.sin(fc*0.08)*5;
+  const tailDirSign = boss.vx < 0 ? 1 : -1;
+  const tailX = boss.vx < 0 ? x + boss.w - 2 : x - 3;
+  ctx.fillRect(tailX, yB + boss.h - 12 + tailWag, 5, 4);
+  ctx.fillRect(tailX + 5*tailDirSign, yB + boss.h - 15 + tailWag, 4, 4);
+  // Copete de león
+  if(boss.variant === 'lion'){
+    ctx.fillStyle = maneColor || '#a04818';
+    ctx.beginPath();
+    ctx.arc(tailX + 5*tailDirSign + 2, yB + boss.h - 15 + tailWag, 4, 0, Math.PI*2);
+    ctx.fill();
+  }
+  // Rayas en cola de tigre
+  if(boss.variant === 'tiger'){
+    ctx.fillStyle = stripeColor;
+    ctx.fillRect(tailX + 5*tailDirSign, yB + boss.h - 14 + tailWag, 1.5, 2);
+    ctx.fillRect(tailX + 2*tailDirSign, yB + boss.h - 11 + tailWag, 1.5, 2);
+  }
+
+  // Indicador de rugido (líneas sonoras)
+  if(roaring){
+    ctx.strokeStyle = 'rgba(255,80,40,0.5)';
+    ctx.lineWidth = 1.2;
+    for(let i=0;i<3;i++){
+      const r = 8 + i*4 + (30-boss.roarT);
+      ctx.beginPath();
+      ctx.arc(x+boss.w/2, yB+20, r, -0.6, 0.6);
+      ctx.stroke();
+    }
   }
 
   if(flash) ctx.globalAlpha = 1;
@@ -5519,11 +6419,6 @@ function drawBoss(){
   hpGrad.addColorStop(1, hpPct > 0.5 ? '#28a028' : hpPct > 0.25 ? '#c89010' : '#a02020');
   ctx.fillStyle = hpGrad;
   ctx.fillRect(hpX, hpY, hpW * hpPct, 6);
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 9px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('GATO REY', hpX + hpW/2, hpY - 3);
-  ctx.textAlign = 'left';
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -5797,7 +6692,10 @@ function drawQueenLulu(){
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  RENDER — FRANKIE (salchicha hembra, rescate del nivel 5)
+//  RENDER — PRINCESAS (varían por mundo)
+//    Lulu  (M1): Bichón Maltés blanco
+//    Turna (M2): Bulldog Francés
+//    Bamby (M3): Salchicha entrada en años
 // ═══════════════════════════════════════════════════════════════
 function drawFrankie(){
   if(!window._frankie) return;
@@ -5809,9 +6707,12 @@ function drawFrankie(){
   const bob = Math.sin(f.bobT) * 1.5;
   const x = screenX, y = f.y + bob;
 
-  // Aura rosa brillante
+  // Aura rosa común
   const glow = 0.5 + Math.sin(fc*0.07)*0.5;
-  ctx.fillStyle = 'rgba(255,150,180,'+(0.15+glow*0.12)+')';
+  const auraCol = f.variant === 'bamby' ? 'rgba(220,180,200,'
+                : f.variant === 'turna' ? 'rgba(220,200,255,'
+                : 'rgba(255,150,180,';
+  ctx.fillStyle = auraCol +(0.15+glow*0.12)+')';
   ctx.beginPath();
   ctx.arc(x+f.w/2, y+f.h/2, 30, 0, Math.PI*2);
   ctx.fill();
@@ -5822,153 +6723,305 @@ function drawFrankie(){
   ctx.ellipse(x+f.w/2, y+f.h+2, f.w/2, 2.5, 0, 0, Math.PI*2);
   ctx.fill();
 
-  // Cuerpo largo de salchicha (rosa-marrón claro, femenina)
-  ctx.fillStyle = '#d4805a';
-  ctx.beginPath();
-  ctx.roundRect(x+1, y+5, f.w-2, 9, 4);
-  ctx.fill();
-  // Brillo en el lomo
-  ctx.fillStyle = '#e89a78';
-  ctx.beginPath();
-  ctx.roundRect(x+2, y+5, f.w-4, 3, 2);
-  ctx.fill();
-  // Panza más clara
-  ctx.fillStyle = '#f0b890';
-  ctx.fillRect(x+3, y+10, f.w-6, 3);
-
-  // Patitas
-  ctx.fillStyle = '#a86038';
-  ctx.fillRect(x+4, y+13, 3, 3);
-  ctx.fillRect(x+f.w-7, y+13, 3, 3);
-  // Detalles pinta de uñas rosa
-  ctx.fillStyle = '#ff5599';
-  ctx.fillRect(x+4.5, y+15, 2, 1);
-  ctx.fillRect(x+f.w-6.5, y+15, 2, 1);
-
-  // Cabeza (a la derecha, mirando al jugador)
-  const hx = x + f.w - 11;
-  ctx.fillStyle = '#d4805a';
-  ctx.beginPath();
-  ctx.roundRect(hx, y, 11, 10, 4);
-  ctx.fill();
-  // Hocico
-  ctx.fillStyle = '#a86038';
-  ctx.beginPath();
-  ctx.roundRect(hx+8, y+4, 5, 4, 2);
-  ctx.fill();
-  // Nariz
-  ctx.fillStyle = '#1a1a1a';
-  ctx.beginPath();
-  ctx.arc(hx+12, y+5.5, 1.2, 0, Math.PI*2);
-  ctx.fill();
-  // Brillito nariz
-  ctx.fillStyle = '#fff';
-  ctx.beginPath();
-  ctx.arc(hx+11.7, y+5.1, 0.4, 0, Math.PI*2);
-  ctx.fill();
-
-  // Ojo con pestañas (parpadea cada cierto tiempo)
-  const blink = (f.blinkT % 180) < 8;
-  if(!blink){
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    ctx.arc(hx+5, y+3, 1.8, 0, Math.PI*2);
-    ctx.fill();
-    ctx.fillStyle = '#1a1a1a';
-    ctx.beginPath();
-    ctx.arc(hx+5.3, y+3, 1.1, 0, Math.PI*2);
-    ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    ctx.arc(hx+5.1, y+2.7, 0.4, 0, Math.PI*2);
-    ctx.fill();
-    // Pestañas largas (toque femenino)
-    ctx.strokeStyle = '#1a1a1a';
-    ctx.lineWidth = 0.6;
-    ctx.beginPath();
-    ctx.moveTo(hx+3.8, y+1.5); ctx.lineTo(hx+3.2, y+0.5);
-    ctx.moveTo(hx+5, y+1); ctx.lineTo(hx+4.8, y+0);
-    ctx.moveTo(hx+6.2, y+1.5); ctx.lineTo(hx+6.5, y+0.5);
-    ctx.stroke();
+  // Dispatch por variante
+  if(f.variant === 'turna'){
+    drawPrincessTurna(f, x, y);
+  } else if(f.variant === 'bamby'){
+    drawPrincessBamby(f, x, y);
   } else {
-    // Ojo cerrado (parpadeo)
-    ctx.strokeStyle = '#1a1a1a';
-    ctx.lineWidth = 0.9;
-    ctx.beginPath();
-    ctx.moveTo(hx+3.8, y+3); ctx.lineTo(hx+6.2, y+3);
-    ctx.stroke();
+    drawPrincessLulu(f, x, y);
   }
-  // Cachete rosadito
-  ctx.fillStyle = 'rgba(255,150,170,0.6)';
-  ctx.beginPath();
-  ctx.arc(hx+4, y+6, 1.6, 0, Math.PI*2);
-  ctx.fill();
 
-  // Oreja caída
-  ctx.fillStyle = '#a86038';
-  ctx.beginPath();
-  ctx.ellipse(hx+2, y+3, 2.5, 5, -0.3, 0, Math.PI*2);
-  ctx.fill();
-
-  // Cola pequeña al lado izquierdo
-  ctx.fillStyle = '#d4805a';
-  ctx.save();
-  ctx.translate(x+1, y+7);
-  ctx.rotate(-0.5 + Math.sin(fc*0.15)*0.2);  // movimiento de colita
-  ctx.fillRect(-2, -5, 3, 7);
-  ctx.restore();
-
-  // ✨ MOÑO ROSA grande en la cabeza ✨
-  ctx.fillStyle = '#ff5599';
-  ctx.beginPath();
-  ctx.ellipse(hx+3, y-2, 3, 2.2, -0.3, 0, Math.PI*2);
-  ctx.ellipse(hx+8, y-2, 3, 2.2, 0.3, 0, Math.PI*2);
-  ctx.fill();
-  ctx.fillStyle = '#cc3377';
-  ctx.beginPath();
-  ctx.arc(hx+5.5, y-2, 1.2, 0, Math.PI*2);
-  ctx.fill();
-  // Brillito del moño
-  ctx.fillStyle = '#ffaacc';
-  ctx.beginPath();
-  ctx.ellipse(hx+2.5, y-2.5, 1, 0.6, -0.3, 0, Math.PI*2);
-  ctx.fill();
-
-  // Corazoncitos flotando alrededor cuando el jugador está cerca
+  // ── Cartelito con nombre cuando el jugador está cerca ──
   const distToPlayer = Math.abs(P.x - f.x);
   if(distToPlayer < 200){
-    const numHearts = 4;
-    for(let i=0; i<numHearts; i++){
-      const ang = fc*0.03 + i*(Math.PI*2/numHearts);
-      const r = 22 + Math.sin(fc*0.05 + i)*3;
-      const px = x + f.w/2 + Math.cos(ang) * r;
-      const py = y + f.h/2 + Math.sin(ang) * r;
-      const sz = 3;
-      ctx.fillStyle = 'rgba(255,128,170,0.9)';
-      ctx.beginPath();
-      ctx.arc(px-sz/3, py-sz/4, sz/2.5, 0, Math.PI*2);
-      ctx.arc(px+sz/3, py-sz/4, sz/2.5, 0, Math.PI*2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(px-sz/1.5, py);
-      ctx.lineTo(px, py+sz);
-      ctx.lineTo(px+sz/1.5, py);
-      ctx.fill();
-    }
-    // Nombre brillante
+    const name = f.variant === 'turna' ? '♥ TURNA ♥'
+              : f.variant === 'bamby' ? '♥ REINA BAMBY ♥'
+              : '♥ LULU ♥';
+    const nameCol = f.variant === 'turna' ? '#c080ff'
+                  : f.variant === 'bamby' ? '#ffb0c0'
+                  : '#fff';
     const alpha = Math.max(0.4, 1 - distToPlayer/200);
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.fillStyle = '#ff80a0';
+    ctx.fillStyle = nameCol;
     ctx.shadowColor = '#000';
     ctx.shadowBlur = 4;
     ctx.font = 'bold 11px system-ui, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('♥ FRANKIE ♥', x+f.w/2, y - 10);
+    ctx.fillText(name, x+f.w/2, y - 10);
     ctx.shadowBlur = 0;
     ctx.textAlign = 'left';
     ctx.restore();
   }
+}
+
+// ── LULU: bichón maltés blanco con moño rosa ──
+function drawPrincessLulu(f, x, y){
+  // Cuerpo blanco esponjoso (peludo)
+  ctx.fillStyle = '#fff8f4';
+  ctx.beginPath();
+  ctx.ellipse(x+f.w/2, y+f.h*0.65, f.w*0.45, f.h*0.42, 0, 0, Math.PI*2);
+  ctx.fill();
+  // Pelitos esponjosos (texturado)
+  ctx.fillStyle = '#f0e8e4';
+  for(let i=0;i<6;i++){
+    const px = x + 3 + i*4;
+    const py = y + f.h*0.5 + (i%2)*2;
+    ctx.beginPath();
+    ctx.arc(px, py, 2.5, 0, Math.PI*2);
+    ctx.fill();
+  }
+  // Cabeza redonda
+  ctx.fillStyle = '#fff8f4';
+  ctx.beginPath();
+  ctx.arc(x+f.w-9, y+f.h*0.35, 7, 0, Math.PI*2);
+  ctx.fill();
+  // Orejas caídas peludas
+  ctx.fillStyle = '#f0e8e4';
+  ctx.beginPath();
+  ctx.ellipse(x+f.w-15, y+f.h*0.4, 3.5, 6, -0.3, 0, Math.PI*2);
+  ctx.ellipse(x+f.w-4, y+f.h*0.4, 3.5, 6, 0.3, 0, Math.PI*2);
+  ctx.fill();
+  // Hocico
+  ctx.fillStyle = '#f0d8d0';
+  ctx.beginPath();
+  ctx.ellipse(x+f.w-6, y+f.h*0.42, 3, 2.5, 0, 0, Math.PI*2);
+  ctx.fill();
+  // Nariz
+  ctx.fillStyle = '#1a1a1a';
+  ctx.beginPath();
+  ctx.arc(x+f.w-4, y+f.h*0.4, 1.2, 0, Math.PI*2);
+  ctx.fill();
+  // Ojos brillantes
+  const blink = (f.blinkT % 180) < 8;
+  if(!blink){
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.arc(x+f.w-13, y+f.h*0.33, 1.3, 0, Math.PI*2);
+    ctx.arc(x+f.w-7, y+f.h*0.33, 1.3, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(x+f.w-13.3, y+f.h*0.33-0.3, 0.5, 0.5);
+    ctx.fillRect(x+f.w-7.3, y+f.h*0.33-0.3, 0.5, 0.5);
+  }
+  // Moño rosa con joya
+  ctx.fillStyle = '#ff5599';
+  ctx.beginPath();
+  ctx.ellipse(x+f.w-12, y+f.h*0.18, 3, 2.2, -0.3, 0, Math.PI*2);
+  ctx.ellipse(x+f.w-6, y+f.h*0.18, 3, 2.2, 0.3, 0, Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = '#cc3377';
+  ctx.beginPath();
+  ctx.arc(x+f.w-9, y+f.h*0.18, 1.3, 0, Math.PI*2);
+  ctx.fill();
+}
+
+// ── TURNA: Bulldog Francés (cuerpo robusto, orejas paradas, hocico chato) ──
+function drawPrincessTurna(f, x, y){
+  // Cuerpo compacto (más rechoncho que Lulu)
+  ctx.fillStyle = '#c8c8c8';
+  ctx.beginPath();
+  ctx.roundRect(x+2, y+f.h*0.35, f.w-4, f.h*0.6, 6);
+  ctx.fill();
+  // Panza blanca
+  ctx.fillStyle = '#f0f0f0';
+  ctx.fillRect(x+5, y+f.h*0.7, f.w-10, f.h*0.25);
+  // Manchas oscuras (típico bulldog)
+  ctx.fillStyle = '#5a5a5a';
+  ctx.beginPath();
+  ctx.arc(x+8, y+f.h*0.55, 2.5, 0, Math.PI*2);
+  ctx.arc(x+f.w-10, y+f.h*0.5, 3, 0, Math.PI*2);
+  ctx.fill();
+  // Cabeza GRANDE cuadrada
+  ctx.fillStyle = '#c8c8c8';
+  ctx.beginPath();
+  ctx.roundRect(x+f.w-15, y+2, 13, 12, 3);
+  ctx.fill();
+  // Mancha en la cara (atigrado bulldog)
+  ctx.fillStyle = '#5a5a5a';
+  ctx.fillRect(x+f.w-12, y+3, 4, 6);
+  // Orejas PARADAS triangulares
+  ctx.fillStyle = '#a8a8a8';
+  ctx.beginPath();
+  ctx.moveTo(x+f.w-14, y+4); ctx.lineTo(x+f.w-12, y-3); ctx.lineTo(x+f.w-10, y+3); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(x+f.w-6, y+3); ctx.lineTo(x+f.w-4, y-3); ctx.lineTo(x+f.w-2, y+4); ctx.fill();
+  // Interior orejas rosa
+  ctx.fillStyle = '#ff90b0';
+  ctx.beginPath();
+  ctx.moveTo(x+f.w-13, y+3); ctx.lineTo(x+f.w-12, y-1); ctx.lineTo(x+f.w-11, y+2); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(x+f.w-5, y+2); ctx.lineTo(x+f.w-4, y-1); ctx.lineTo(x+f.w-3, y+3); ctx.fill();
+  // Hocico chato muy ancho (sello distintivo del bulldog)
+  ctx.fillStyle = '#a0a0a0';
+  ctx.beginPath();
+  ctx.roundRect(x+f.w-12, y+8, 9, 5, 2);
+  ctx.fill();
+  // Arrugas (líneas en el hocico)
+  ctx.strokeStyle = 'rgba(60,60,60,0.6)';
+  ctx.lineWidth = 0.6;
+  ctx.beginPath();
+  ctx.moveTo(x+f.w-11, y+10); ctx.lineTo(x+f.w-4, y+10);
+  ctx.moveTo(x+f.w-11, y+12); ctx.lineTo(x+f.w-4, y+12);
+  ctx.stroke();
+  // Nariz grande negra
+  ctx.fillStyle = '#1a1a1a';
+  ctx.beginPath();
+  ctx.roundRect(x+f.w-9, y+7, 4, 3, 1);
+  ctx.fill();
+  // Ojos grandes saltones
+  const blink = (f.blinkT % 200) < 8;
+  if(!blink){
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(x+f.w-13, y+6, 1.6, 0, Math.PI*2);
+    ctx.arc(x+f.w-3, y+6, 1.6, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath();
+    ctx.arc(x+f.w-13, y+6.3, 1.1, 0, Math.PI*2);
+    ctx.arc(x+f.w-3, y+6.3, 1.1, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(x+f.w-13.3, y+5.7, 0.5, 0.5);
+    ctx.fillRect(x+f.w-3.3, y+5.7, 0.5, 0.5);
+  }
+  // Pestañas femeninas
+  ctx.strokeStyle = '#1a1a1a';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(x+f.w-14.5, y+4.5); ctx.lineTo(x+f.w-15, y+3.5);
+  ctx.moveTo(x+f.w-13, y+4); ctx.lineTo(x+f.w-13.2, y+2.7);
+  ctx.moveTo(x+f.w-3, y+4); ctx.lineTo(x+f.w-2.8, y+2.7);
+  ctx.moveTo(x+f.w-1.5, y+4.5); ctx.lineTo(x+f.w-1, y+3.5);
+  ctx.stroke();
+  // Tiara violeta (en lugar de moño)
+  ctx.fillStyle = '#c060ff';
+  ctx.beginPath();
+  ctx.moveTo(x+f.w-12, y+1);
+  ctx.lineTo(x+f.w-10, y-3);
+  ctx.lineTo(x+f.w-8, y);
+  ctx.lineTo(x+f.w-6, y-4);
+  ctx.lineTo(x+f.w-4, y);
+  ctx.lineTo(x+f.w-2, y+1);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(x+f.w-7, y-2, 1.5, 1.5);
+}
+
+// ── BAMBY: salchicha entrada en años (reina madre — corona dorada, lentes) ──
+function drawPrincessBamby(f, x, y){
+  // Cuerpo largo de salchicha (algo más gris/avellana)
+  ctx.fillStyle = '#a8704a';
+  ctx.beginPath();
+  ctx.roundRect(x+1, y+f.h*0.4, f.w-2, f.h*0.5, 5);
+  ctx.fill();
+  // Panza canosa
+  ctx.fillStyle = '#d8c0a0';
+  ctx.fillRect(x+4, y+f.h*0.65, f.w-8, f.h*0.25);
+  // Manchas canas (mostrar edad)
+  ctx.fillStyle = '#e0d8c8';
+  ctx.beginPath();
+  ctx.arc(x+8, y+f.h*0.5, 1.5, 0, Math.PI*2);
+  ctx.arc(x+14, y+f.h*0.55, 1.2, 0, Math.PI*2);
+  ctx.arc(x+f.w-12, y+f.h*0.5, 1.4, 0, Math.PI*2);
+  ctx.fill();
+  // Patitas
+  ctx.fillStyle = '#7a4818';
+  ctx.fillRect(x+4, y+f.h-3, 3, 4);
+  ctx.fillRect(x+f.w-7, y+f.h-3, 3, 4);
+  // Cabeza de salchicha
+  ctx.fillStyle = '#a8704a';
+  ctx.beginPath();
+  ctx.roundRect(x+f.w-12, y, 12, 11, 4);
+  ctx.fill();
+  // Hocico
+  ctx.fillStyle = '#7a4818';
+  ctx.beginPath();
+  ctx.roundRect(x+f.w-6, y+5, 6, 4, 2);
+  ctx.fill();
+  // Nariz
+  ctx.fillStyle = '#1a1a1a';
+  ctx.beginPath();
+  ctx.arc(x+f.w-1, y+6, 1.3, 0, Math.PI*2);
+  ctx.fill();
+  // Oreja caída larga (con canas)
+  ctx.fillStyle = '#8a5828';
+  ctx.beginPath();
+  ctx.ellipse(x+f.w-10, y+4, 2.5, 5, -0.4, 0, Math.PI*2);
+  ctx.fill();
+  // Cana en la oreja
+  ctx.fillStyle = '#d8c0a0';
+  ctx.fillRect(x+f.w-10, y+3, 0.8, 2);
+  // ── LENTES (anteojos de abuela, redondos) ──
+  ctx.strokeStyle = '#1a1a1a';
+  ctx.lineWidth = 0.9;
+  // Cristal izquierdo (frente a su ojo izq)
+  ctx.beginPath();
+  ctx.arc(x+f.w-9, y+3.5, 2.2, 0, Math.PI*2);
+  // Cristal derecho
+  ctx.arc(x+f.w-3.5, y+3.5, 2.2, 0, Math.PI*2);
+  ctx.stroke();
+  // Puente entre lentes
+  ctx.beginPath();
+  ctx.moveTo(x+f.w-7, y+3.5); ctx.lineTo(x+f.w-5.5, y+3.5);
+  ctx.stroke();
+  // Reflejos de cristal
+  ctx.fillStyle = 'rgba(180,220,255,0.5)';
+  ctx.fillRect(x+f.w-9.5, y+2.8, 1.2, 0.8);
+  ctx.fillRect(x+f.w-4, y+2.8, 1.2, 0.8);
+  // Ojos chiquitos detrás de los lentes
+  const blink = (f.blinkT % 220) < 10;
+  if(!blink){
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath();
+    ctx.arc(x+f.w-9, y+3.5, 0.9, 0, Math.PI*2);
+    ctx.arc(x+f.w-3.5, y+3.5, 0.9, 0, Math.PI*2);
+    ctx.fill();
+  }
+  // Sonrisa amable (línea curva debajo del hocico)
+  ctx.strokeStyle = '#5a2818';
+  ctx.lineWidth = 0.6;
+  ctx.beginPath();
+  ctx.arc(x+f.w-3, y+8, 1.5, 0, Math.PI);
+  ctx.stroke();
+  // ── CORONA DORADA de reina madre (más grande, joyas múltiples) ──
+  ctx.fillStyle = '#ffd34d';
+  ctx.beginPath();
+  ctx.moveTo(x+f.w-13, y-3);
+  ctx.lineTo(x+f.w-11, y-9);
+  ctx.lineTo(x+f.w-8, y-5);
+  ctx.lineTo(x+f.w-6, y-10);    // pico central
+  ctx.lineTo(x+f.w-4, y-5);
+  ctx.lineTo(x+f.w-1, y-9);
+  ctx.lineTo(x+f.w+1, y-3);
+  ctx.closePath();
+  ctx.fill();
+  // Base de la corona
+  ctx.fillStyle = '#c89010';
+  ctx.fillRect(x+f.w-13, y-3, 14, 2);
+  // Joyas en cada pico
+  ctx.fillStyle = '#ff2080'; ctx.fillRect(x+f.w-11.5, y-7, 1.5, 1.5);
+  ctx.fillStyle = '#40e0ff'; ctx.fillRect(x+f.w-6.5, y-8, 1.5, 1.5);
+  ctx.fillStyle = '#40ff60'; ctx.fillRect(x+f.w-1.5, y-7, 1.5, 1.5);
+  // Joya principal en el centro de la base
+  ctx.fillStyle = '#ff80a0';
+  ctx.beginPath();
+  ctx.arc(x+f.w-6, y-2, 1.3, 0, Math.PI*2);
+  ctx.fill();
+  // Bastón apoyado (decorativo, indicar edad)
+  ctx.strokeStyle = '#8a5824';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(x-2, y+f.h-2);
+  ctx.lineTo(x-3, y+f.h*0.3);
+  ctx.stroke();
+  // Mango curvo del bastón
+  ctx.beginPath();
+  ctx.arc(x-2, y+f.h*0.28, 2, Math.PI, Math.PI*1.8);
+  ctx.stroke();
 }
 
 function drawArtifacts(){
@@ -6090,33 +7143,38 @@ function drawShootButton(){
 }
 
 function drawLevelIntro(){
-  if(fc > 180) return;
-  const alpha = fc < 60 ? fc/60 : (fc > 140 ? (180-fc)/40 : 1);
+  if(introT > 180) return;
+  const alpha = introT < 60 ? introT/60 : (introT > 140 ? (180-introT)/40 : 1);
   if(alpha <= 0) return;
-  const titles = [
-    {t:'MUNDO 1', s:'PRADERA SOLEADA', c:'#88e060'},
-    {t:'MUNDO 2', s:'CAVERNA NOCTURNA', c:'#a060ff'},
-    {t:'MUNDO 3', s:'WONDER WIENER', c:'#40d8c0'},
-    {t:'MUNDO 4', s:'NORDELTOPOLIS', c:'#40a8ff'},
-    {t:'MUNDO 5', s:'PANTANO NOCTURNO', c:'#9affb0'}
+  const baseTitles = [
+    {n:'PRADERA',           c1:'#88e060', c2:'#88e060', c3:'#5a90a0'},
+    {n:'CAVERNA',           c1:'#a060ff', c2:'#7a40b0', c3:'#4a6080'},
+    {n:'WONDER WIENER',     c1:'#40d8c0', c2:'#4a8080', c3:'#5aa0a0'},
+    {n:'NORDELTOPOLIS',     c1:'#40a8ff', c2:'#7060c0', c3:'#80b0c0'},
+    {n:'PANTANO NOCTURNO',  c1:'#9affb0', c2:'#5a8060', c3:'#60a080'}
   ];
-  const info = titles[level-1];
+  const info = baseTitles[level-1];
   if(!info) return;
+  const worldName = worldNum === 1 ? '' : (worldNum === 2 ? ' TÉTRICO' : ' FRENÉTICO');
+  const titleColor = worldNum === 1 ? info.c1 : (worldNum === 2 ? info.c2 : info.c3);
   ctx.save();
   ctx.globalAlpha = alpha * 0.85;
   ctx.fillStyle = '#000';
-  ctx.fillRect(0, CH/2 - 50, CW, 100);
+  ctx.fillRect(0, CH/2 - 56, CW, 110);
   ctx.globalAlpha = alpha;
   ctx.textAlign = 'center';
-  ctx.fillStyle = info.c;
+  ctx.fillStyle = titleColor;
   ctx.font = 'bold 28px system-ui, sans-serif';
-  ctx.shadowColor = info.c;
+  ctx.shadowColor = titleColor;
   ctx.shadowBlur = 12;
-  ctx.fillText(info.t, CW/2, CH/2 - 8);
+  ctx.fillText('MUNDO ' + worldNum + '-' + level + worldName, CW/2, CH/2 - 10);
   ctx.shadowBlur = 0;
   ctx.fillStyle = '#fff';
   ctx.font = 'bold 18px system-ui, sans-serif';
-  ctx.fillText(info.s, CW/2, CH/2 + 22);
+  ctx.fillText(info.n, CW/2, CH/2 + 18);
+  ctx.font = 'bold 11px system-ui, sans-serif';
+  ctx.fillStyle = '#888';
+  ctx.fillText('preparate...', CW/2, CH/2 + 38);
   ctx.textAlign = 'left';
   ctx.restore();
 }
@@ -6228,7 +7286,7 @@ function render(){
   }
 
   // boss
-  if(level === 2 && boss && boss.hp > 0){
+  if((level === 2 || level === 5) && boss){
     drawBoss();
   }
 
@@ -6335,28 +7393,43 @@ let acc = 0;
 
 function step(){
   fc++;
-  if(level < 4){
-    updatePlayer();
-    updateEnemies();
-    if(level === 2) updateBoss();
-    updateFallTiles();
-    updateItems();
-    updatePlayerBullets();
-    updateParts();
-    updateArtifacts();
-    if(level === 3) updateSkateboard();
-    checkSubLevelEntry();
-    checkFlag();
+  introT++;
+  if(powerUpT > 0) powerUpT--;
+
+  // Mientras el cartel del nivel está visible, solo dibujamos
+  // (introT <= 140 = el texto sigue plenamente visible).
+  // Después de eso (fadeout), los enemigos pueden moverse.
+  const frozen = introT <= 140;
+
+  if(!frozen){
+    if(level < 4){
+      updatePlayer();
+      updateEnemies();
+      if(level === 2) updateBoss();
+      updateFallTiles();
+      updateItems();
+      updatePlayerBullets();
+      updateParts();
+      updateArtifacts();
+      if(level === 3) updateSkateboard();
+      checkSubLevelEntry();
+      checkFlag();
+    } else {
+      updatePlayer();
+      updateEnemies();
+      if(level === 5) updateBoss();   // boss del 5: carpincho madre
+      updateFallTiles();
+      updateItems();
+      updatePlayerBullets();
+      updateParts();
+      updateArtifacts();
+      checkFlag();
+    }
   } else {
-    updatePlayer();
-    updateEnemies();
-    updateFallTiles();
-    updateItems();
-    updatePlayerBullets();
+    // Durante intro: solo respiramos partículas y movimiento del cartel
     updateParts();
-    updateArtifacts();
-    checkFlag();
   }
+
   if(cam.shakeT > 0) cam.shakeT *= 0.86;
   if(cam.shakeT < 0.1) cam.shakeT = 0;
 
@@ -6833,5 +7906,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // pause toggle (P key) handled in main keyboard listener.
 
 </script>
+<!-- Vercel Analytics -->
+<script defer src="/_vercel/insights/script.js"></script>
 </body>
 </html>
