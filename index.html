@@ -643,10 +643,10 @@ function buildLevel1(){
     [200,10],[202,10]
   ].forEach(([x,y]) => addBone(x,y));
 
-  // Enemigos con desplazamiento natural
+  // Enemigos con desplazamiento natural — VELOCIDAD AUMENTADA
   // patrol = oscilan suave alrededor de su zona
   [24, 32, 49, 67, 75, 90, 107, 137, 147, 168, 180, 191].forEach(ex => {
-    addEnemy(ex, 11, {spd:0.65, patrol: 4*TILE});
+    addEnemy(ex, 11, {spd:0.95, patrol: 5*TILE});
   });
 }
 
@@ -769,26 +769,70 @@ function buildLevel2(){
   // Huesos en suelo (zona transitable)
   [4,18,38,53,73,87,100,127,135,156].forEach(x => addBone(x, 10));
 
-  // Enemigos — +20% dificultad: más rápidos, MÁS gatos, y patrullan TODO el mapa
-  // (patrolRange enorme = se mueven libremente por todo el nivel)
+  // Enemigos — DIFICULTAD ALTA: rápidos, en TODAS las alturas (suelo + plataformas)
+  // patrolRange enorme = se mueven libremente por todo el nivel
   const N2_GLOBAL_PATROL = 999*TILE;
-  [10, 13, 18, 27, 36, 43, 50, 57, 66, 75, 82, 87, 95, 100, 108, 113, 120, 124, 130, 137, 144, 152, 160].forEach(ex => {
+  // Gatos saltarines en el SUELO (rápidos)
+  [10, 18, 27, 43, 57, 75, 87, 100, 113, 124, 137, 152].forEach(ex => {
     const dir = Math.random()>0.5?1:-1;
     enemies.push({
       x:ex*TILE, y:10*TILE,
       w:18, h:16,
-      vx: 0.72*dir, vy:0, dir: dir,
+      vx: 0.95*dir, vy:0, dir: dir,
       alive:true, dead:false, deadT:0, fr:0, ft:0,
       type:'jump', kind:'cat',
-      baseSpd:0.72,
-      jumpT: 70+(Math.random()*60|0),
+      baseSpd:0.95,
+      jumpT: 60+(Math.random()*50|0),
       onGround:false,
       breathT: Math.random()*Math.PI*2,
       homeX: ex*TILE, patrolRange: N2_GLOBAL_PATROL
     });
   });
-  [22, 30, 38, 50, 60, 70, 80, 88, 95, 105, 113, 122, 128, 136, 144].forEach(ex => {
-    addEnemy(ex, 11, {spd:1.02, patrol: N2_GLOBAL_PATROL});
+  // Gatos caminantes en el SUELO (rápidos)
+  [22, 38, 50, 70, 80, 95, 113, 128, 144].forEach(ex => {
+    addEnemy(ex, 11, {spd:1.30, patrol: N2_GLOBAL_PATROL});
+  });
+
+  // ── GATOS EN LAS PLATAFORMAS ELEVADAS ──
+  // Spawn justo encima de cada plataforma (un tile arriba de su fila)
+  // Formato: [x_inicio_plataforma, fila_de_plataforma]
+  const platCats = [
+    [8, 8], [15, 6], [22, 9], [28, 7], [33, 5],
+    [38, 7], [43, 9], [49, 7], [56, 5], [62, 8],
+    [68, 6], [74, 8], [82, 7], [90, 5], [97, 8],
+    [106, 6], [115, 6], [123, 8], [131, 5], [141, 8],
+    [152, 6], [162, 8]
+  ];
+  platCats.forEach(([ex, platRow]) => {
+    const dir = Math.random()>0.5?1:-1;
+    enemies.push({
+      x:ex*TILE, y:(platRow-1)*TILE,
+      w:18, h:16,
+      vx: 1.10*dir, vy:0, dir: dir,
+      alive:true, dead:false, deadT:0, fr:0, ft:0,
+      type:'walk', kind:'cat',
+      baseSpd:1.10,
+      jumpT:0,
+      onGround:false,
+      breathT: Math.random()*Math.PI*2,
+      homeX: ex*TILE, patrolRange: 5*TILE
+    });
+  });
+  // Algunos gatos saltarines EN PLATAFORMAS (cambian de plataforma con saltos)
+  [[14, 6], [48, 7], [89, 5], [114, 6], [150, 6]].forEach(([ex, platRow]) => {
+    const dir = Math.random()>0.5?1:-1;
+    enemies.push({
+      x:ex*TILE, y:(platRow-1)*TILE,
+      w:18, h:16,
+      vx: 0.85*dir, vy:0, dir: dir,
+      alive:true, dead:false, deadT:0, fr:0, ft:0,
+      type:'jump', kind:'cat',
+      baseSpd:0.85,
+      jumpT: 50+(Math.random()*40|0),
+      onGround:false,
+      breathT: Math.random()*Math.PI*2,
+      homeX: ex*TILE, patrolRange: N2_GLOBAL_PATROL
+    });
   });
 
   // ── SALA DEL JEFE ──
@@ -952,10 +996,10 @@ function buildLevel3(){
     enemies.push({
       x:ex*TILE, y:10*TILE,
       w:14, h:13,
-      vx: 0.91*dir, vy:0, dir: dir,
+      vx: 1.15*dir, vy:0, dir: dir,
       alive:true, dead:false, deadT:0, fr:0, ft:0,
       type:'walk', kind:'cat',
-      baseSpd:0.91,
+      baseSpd:1.15,
       jumpT:0,
       onGround:false,
       breathT: Math.random()*Math.PI*2,
@@ -969,11 +1013,11 @@ function buildLevel3(){
     enemies.push({
       x:ex*TILE, y:10*TILE,
       w:14, h:13,
-      vx: 0.78*dir, vy:0, dir: dir,
+      vx: 1.00*dir, vy:0, dir: dir,
       alive:true, dead:false, deadT:0, fr:0, ft:0,
       type:'jump', kind:'cat',
-      baseSpd:0.78,
-      jumpT: 50+(Math.random()*35|0),
+      baseSpd:1.00,
+      jumpT: 45+(Math.random()*30|0),
       onGround:false,
       breathT:0, small:true,
       homeX: ex*TILE, patrolRange: 3*TILE
@@ -985,15 +1029,41 @@ function buildLevel3(){
     enemies.push({
       x:ex*TILE, y:10*TILE,
       w:14, h:12,
-      vx: 1.43*dir, vy:0, dir: dir,
+      vx: 1.75*dir, vy:0, dir: dir,
       alive:true, dead:false, deadT:0, fr:0, ft:0,
       type:'walk', kind:'squirrel',
-      baseSpd:1.43,
-      jumpT: 40+(Math.random()*25|0),
+      baseSpd:1.75,
+      jumpT: 35+(Math.random()*22|0),
       onGround:false,
       breathT: Math.random()*Math.PI*2,
       small:true,
       homeX: ex*TILE, patrolRange: 4*TILE
+    });
+  });
+
+  // ── MURCIÉLAGOS VOLADORES — esquivar saltando o agachándose ──
+  // Vuelan en zigzag horizontal a varias alturas. Se pueden matar saltándoles encima.
+  // No tienen gravedad: type:'fly'
+  [
+    [35, 4], [55, 3], [78, 5], [105, 4], [128, 3],
+    [148, 5], [170, 4], [195, 3], [218, 5], [240, 4]
+  ].forEach(([ex, ey])=>{
+    const dir = Math.random()>0.5?1:-1;
+    enemies.push({
+      x:ex*TILE, y:ey*TILE,
+      w:18, h:12,
+      vx: 1.2*dir, vy:0, dir: dir,
+      alive:true, dead:false, deadT:0, fr:0, ft:0,
+      type:'fly', kind:'bat',
+      baseSpd:1.2,
+      jumpT:0,
+      onGround:false,
+      breathT: Math.random()*Math.PI*2,
+      flyBaseY: ey*TILE,           // altura base de vuelo
+      flyAmpY: 1.5*TILE,           // amplitud vertical de zigzag
+      flyPhase: Math.random()*Math.PI*2,
+      flySpeedY: 0.025 + Math.random()*0.015,  // velocidad de oscilación vertical
+      homeX: ex*TILE, patrolRange: 12*TILE
     });
   });
 }
@@ -1138,10 +1208,10 @@ function buildLevel4(){
     enemies.push({
       x:ex*TILE, y:10*TILE,
       w:24, h:18,
-      vx: 0.49*dir, vy:0, dir: dir,
+      vx: 0.65*dir, vy:0, dir: dir,
       alive:true, dead:false, deadT:0, fr:0, ft:0,
       type:'walk', kind:'capi',
-      baseSpd:0.49,
+      baseSpd:0.65,
       jumpT:0,
       onGround:false,
       breathT: Math.random()*Math.PI*2,
@@ -1149,17 +1219,17 @@ function buildLevel4(){
       waterEnemy:false
     });
   });
-  // Capi acuático — flota en el agua, sigue al jugador horizontal (+40% velocidad, más cantidad)
+  // Capi acuático — flota en el agua, sigue al jugador horizontal (más velocidad, más cantidad)
   // ATENCIÓN: el primer acuático aparece a partir de x=27 para que el jugador tenga margen.
   [27, 45, 53, 65, 75, 88, 100, 118, 134, 148, 155, 172, 184].forEach(ex=>{
     const dir = Math.random()>0.5?1:-1;
     enemies.push({
       x:ex*TILE, y: water.surfaceY - 12,
       w:24, h:14,
-      vx: 0.39*dir, vy:0, dir: dir,
+      vx: 0.55*dir, vy:0, dir: dir,
       alive:true, dead:false, deadT:0, fr:0, ft:0,
       type:'water', kind:'capi',
-      baseSpd:0.39,
+      baseSpd:0.55,
       jumpT:0,
       onGround:false,
       breathT: Math.random()*Math.PI*2,
@@ -1306,10 +1376,10 @@ function buildLevel5(){
     enemies.push({
       x:ex*TILE, y:10*TILE,
       w:24, h:18,
-      vx: 0.45*dir, vy:0, dir: dir,
+      vx: 0.60*dir, vy:0, dir: dir,
       alive:true, dead:false, deadT:0, fr:0, ft:0,
       type:'walk', kind:'capi',
-      baseSpd:0.45,
+      baseSpd:0.60,
       jumpT:0,
       onGround:false,
       breathT: Math.random()*Math.PI*2,
@@ -1343,10 +1413,10 @@ function buildLevel5(){
     enemies.push({
       x:ex*TILE, y: water.surfaceY - 10,
       w:42, h:16,
-      vx: 0.6, vy:0, dir: 1,  // SIEMPRE hacia la derecha
+      vx: 0.85, vy:0, dir: 1,  // SIEMPRE hacia la derecha
       alive:true, dead:false, deadT:0, fr:0, ft:0,
       type:'croc', kind:'croc',
-      baseSpd:0.6,
+      baseSpd:0.85,
       jumpT:0,
       onGround:false,
       breathT: Math.random()*Math.PI*2,
@@ -1655,6 +1725,45 @@ function updateEnemies(){
           } else {
             P.dead = true;
             burst(P.x+P.w/2, P.y+P.h/2, '#ff4040', 16);
+          }
+        }
+      }
+      continue;
+    }
+
+    // ─── MURCIÉLAGO VOLADOR (nivel 3) ───
+    // Vuela horizontal con oscilación vertical (zigzag). NO tiene gravedad.
+    // Sí se puede matar saltándole encima.
+    if(e.type === 'fly'){
+      e.flyPhase += e.flySpeedY;
+      // Oscilación vertical sinusoidal
+      e.y = e.flyBaseY + Math.sin(e.flyPhase) * e.flyAmpY;
+      // Movimiento horizontal con patrullaje
+      const offset = e.x - e.homeX;
+      if(offset > e.patrolRange && e.dir > 0){
+        e.dir = -1;
+      } else if(offset < -e.patrolRange && e.dir < 0){
+        e.dir = 1;
+      }
+      e.x += e.dir * e.baseSpd;
+      // Aletear más rápido para animar
+      // Colisión con jugador
+      if(!P.dead && P.inv === 0 && active){
+        const hb = {x:e.x+2, y:e.y+2, w:e.w-4, h:e.h-4};
+        if(aabb(P, hb)){
+          if(P.vy > 0.4 && P.y + P.h < e.y + e.h*0.6){
+            // Aplastar al murciélago
+            e.dead = true; e.deadT = 0;
+            e.vy = -3;
+            e.vx = 0;
+            P.vy = -6.2;
+            rewardBone(1);
+            burst(e.x+e.w/2, e.y+4, '#9060c0', 14);
+            showFloatingText('+1', e.x+e.w/2, e.y, '#ffd34d');
+          } else {
+            P.dead = true;
+            burst(P.x+P.w/2, P.y+P.h/2, '#ff2020', 16);
+            cam.shakeT = 12;
           }
         }
       }
@@ -2602,18 +2711,185 @@ function drawParallax(){
       ctx.arc(px+54, py+8, 14, 0, Math.PI*2);
       ctx.fill();
     });
-    // Colinas lejanas violáceas
-    ctx.fillStyle = 'rgba(80,60,120,0.6)';
-    for(let i=0;i<8;i++){
-      const cx = i*240;
-      const px = ((cx - cam.x*0.2) % (CW+400) + CW+400) % (CW+400) - 200;
-      const h = 35 + (i%3)*15;
-      ctx.beginPath();
-      ctx.moveTo(px-80, CH-CH*0.42);
-      ctx.lineTo(px, CH-CH*0.42-h);
-      ctx.lineTo(px+80, CH-CH*0.42);
-      ctx.fill();
+
+    // ── MANSIONES CON PUERTOS (lejano, segundo plano) ──
+    // Skyline lejano de Nordelta con barrios privados y puertos
+    const skyY = CH - CH*0.42;  // base donde se asientan las mansiones (lejanía)
+    // Línea de costa lejana detrás de las mansiones
+    ctx.fillStyle = 'rgba(60,80,120,0.55)';
+    ctx.fillRect(0, skyY+4, CW, 6);
+
+    // Renderizar mansiones repetidas con parallax muy lejano
+    for(let i=0;i<14;i++){
+      const cx = i*180;
+      const px = ((cx - cam.x*0.18) % (CW+360) + CW+360) % (CW+360) - 180;
+      const variant = i % 4;  // distintos diseños de mansión
+
+      // Sombra/silueta general de la mansión
+      ctx.fillStyle = 'rgba(70,55,95,0.85)';
+
+      if(variant === 0){
+        // Mansión tipo "colonial" con torreta
+        const mw = 60, mh = 32;
+        const mx = px, my = skyY - mh;
+        // Cuerpo principal
+        ctx.fillRect(mx, my+8, mw, mh-8);
+        // Techo a dos aguas
+        ctx.beginPath();
+        ctx.moveTo(mx-2, my+10);
+        ctx.lineTo(mx + mw/2, my-2);
+        ctx.lineTo(mx + mw+2, my+10);
+        ctx.fill();
+        // Torreta lateral
+        ctx.fillRect(mx + mw - 14, my, 12, mh);
+        // Techo torreta cónico
+        ctx.beginPath();
+        ctx.moveTo(mx + mw - 15, my+1);
+        ctx.lineTo(mx + mw - 8, my-8);
+        ctx.lineTo(mx + mw - 1, my+1);
+        ctx.fill();
+        // Ventanas iluminadas (amarillo cálido)
+        ctx.fillStyle = 'rgba(255,220,140,0.7)';
+        ctx.fillRect(mx+8, my+14, 4, 5);
+        ctx.fillRect(mx+18, my+14, 4, 5);
+        ctx.fillRect(mx+28, my+14, 4, 5);
+        ctx.fillRect(mx+38, my+14, 4, 5);
+        ctx.fillRect(mx+8, my+22, 4, 5);
+        ctx.fillRect(mx+18, my+22, 4, 5);
+        // Ventana de la torreta
+        ctx.fillStyle = 'rgba(255,240,180,0.85)';
+        ctx.fillRect(mx + mw - 11, my+6, 3, 5);
+
+      } else if(variant === 1){
+        // Mansión moderna larga
+        const mw = 80, mh = 26;
+        const mx = px, my = skyY - mh;
+        ctx.fillRect(mx, my+4, mw, mh-4);
+        // Techo plano con detalle
+        ctx.fillRect(mx-1, my, mw+2, 5);
+        // Ala derecha más baja
+        ctx.fillRect(mx+mw-2, my+10, 14, mh-10);
+        // Ventanas grandes panorámicas
+        ctx.fillStyle = 'rgba(255,220,140,0.65)';
+        for(let v=0; v<6; v++){
+          ctx.fillRect(mx + 6 + v*11, my+10, 7, 6);
+        }
+        // Pileta/jardín (rectángulo azul al lado)
+        ctx.fillStyle = 'rgba(120,200,230,0.55)';
+        ctx.fillRect(mx+mw+1, skyY-2, 16, 3);
+
+      } else if(variant === 2){
+        // Mansión con doble pico (estilo francés)
+        const mw = 50, mh = 28;
+        const mx = px, my = skyY - mh;
+        ctx.fillRect(mx, my+10, mw, mh-10);
+        // Dos techos triangulares
+        ctx.beginPath();
+        ctx.moveTo(mx-1, my+12);
+        ctx.lineTo(mx + 12, my);
+        ctx.lineTo(mx + 24, my+12);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(mx + 26, my+12);
+        ctx.lineTo(mx + 38, my+2);
+        ctx.lineTo(mx + mw+1, my+12);
+        ctx.fill();
+        // Ventanas
+        ctx.fillStyle = 'rgba(255,220,140,0.65)';
+        ctx.fillRect(mx+5, my+15, 3, 4);
+        ctx.fillRect(mx+12, my+15, 3, 4);
+        ctx.fillRect(mx+19, my+15, 3, 4);
+        ctx.fillRect(mx+28, my+15, 3, 4);
+        ctx.fillRect(mx+35, my+15, 3, 4);
+        ctx.fillRect(mx+42, my+15, 3, 4);
+        // Puerta central
+        ctx.fillStyle = 'rgba(180,140,90,0.7)';
+        ctx.fillRect(mx + mw/2 - 3, my+20, 6, 6);
+
+      } else {
+        // Casa de techo rojo amplia
+        const mw = 55, mh = 24;
+        const mx = px, my = skyY - mh;
+        ctx.fillRect(mx, my+8, mw, mh-8);
+        // Techo rojizo
+        ctx.fillStyle = 'rgba(150,70,55,0.85)';
+        ctx.beginPath();
+        ctx.moveTo(mx-2, my+10);
+        ctx.lineTo(mx+10, my);
+        ctx.lineTo(mx + mw - 10, my);
+        ctx.lineTo(mx + mw+2, my+10);
+        ctx.closePath();
+        ctx.fill();
+        // Chimenea
+        ctx.fillStyle = 'rgba(80,60,80,0.85)';
+        ctx.fillRect(mx + mw - 18, my-4, 4, 8);
+        // Ventanas
+        ctx.fillStyle = 'rgba(255,220,140,0.65)';
+        ctx.fillRect(mx+8, my+12, 4, 5);
+        ctx.fillRect(mx+18, my+12, 4, 5);
+        ctx.fillRect(mx+28, my+12, 4, 5);
+        ctx.fillRect(mx+38, my+12, 4, 5);
+      }
     }
+
+    // ── PUERTOS / MUELLES CON BARCOS (entre las mansiones, sobre el agua del fondo) ──
+    // Banda de agua de fondo (más oscura, lejana)
+    ctx.fillStyle = 'rgba(50,100,150,0.5)';
+    ctx.fillRect(0, skyY+10, CW, 14);
+    // Brillitos en el agua de fondo
+    ctx.fillStyle = 'rgba(180,210,240,0.35)';
+    for(let i=0;i<10;i++){
+      const px = ((i*120 - cam.x*0.15) % (CW+120) + CW+120) % (CW+120) - 60;
+      const wave = Math.sin(fc*0.04 + i)*1;
+      ctx.fillRect(px, skyY+12+wave, 14, 1);
+    }
+
+    // Muelles + barcos atracados
+    for(let i=0;i<8;i++){
+      const cx = i*240 + 60;
+      const px = ((cx - cam.x*0.18) % (CW+360) + CW+360) % (CW+360) - 180;
+      // Muelle (rectángulo marrón sobre el agua)
+      ctx.fillStyle = 'rgba(110,75,45,0.85)';
+      ctx.fillRect(px, skyY+10, 30, 2);
+      // Pilotes (líneas verticales)
+      for(let p=0; p<5; p++){
+        ctx.fillRect(px+p*6+2, skyY+12, 1, 6);
+      }
+      // Barquito atracado al final del muelle
+      const bx = px + 28, by = skyY + 11;
+      // Casco
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.moveTo(bx, by+2);
+      ctx.lineTo(bx+16, by+2);
+      ctx.lineTo(bx+14, by+5);
+      ctx.lineTo(bx+2, by+5);
+      ctx.closePath();
+      ctx.fill();
+      // Línea de pintura del casco
+      ctx.fillStyle = 'rgba(80,40,30,0.85)';
+      ctx.fillRect(bx+2, by+4, 12, 1);
+      // Cabina/mástil
+      if(i % 2 === 0){
+        // Yate con cabina
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(bx+5, by-3, 7, 5);
+        ctx.fillStyle = 'rgba(100,160,200,0.7)';
+        ctx.fillRect(bx+6, by-2, 5, 2);
+      } else {
+        // Velero con mástil y vela
+        ctx.fillStyle = '#8a6a40';
+        ctx.fillRect(bx+8, by-10, 1, 12);
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.beginPath();
+        ctx.moveTo(bx+9, by-9);
+        ctx.lineTo(bx+15, by);
+        ctx.lineTo(bx+9, by);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+
     // ── AGUA — más cerca ──
     if(water){
       const wy = water.surfaceY;
@@ -2888,6 +3164,7 @@ function drawEnemy(e){
   if(x < -40 || x > CW + 40) return;
 
   if(e.kind === 'croc') drawCroc(e, x, y);
+  else if(e.kind === 'bat') drawBat(e, x, y);
   else if(e.kind === 'capi') drawCapincho(e, x, y);
   else if(e.kind === 'squirrel') drawSquirrel(e, x, y);
   else drawCat(e, x, y);
@@ -3318,6 +3595,148 @@ function drawCroc(e, x, y){
     ctx.fillStyle = 'rgba(0,0,0,0.15)';
     ctx.fillRect(cx, cy+11, 16, 1);
   }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  RENDER — MURCIÉLAGO (nivel 3)
+// ═══════════════════════════════════════════════════════════════
+function drawBat(e, x, y){
+  // Sombra (en el suelo, debajo)
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.beginPath();
+  ctx.ellipse(x+e.w/2, 11*TILE+TILE-2, e.w/3, 1.5, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  if(e.dead){
+    // Cae con alitas plegadas
+    ctx.fillStyle = '#3a1858';
+    ctx.fillRect(x+4, y+e.h*0.4, e.w-8, e.h*0.5);
+    // Ojos X
+    ctx.fillStyle = '#000';
+    ctx.fillRect(x+e.w*0.35, y+e.h*0.5, 1, 1);
+    ctx.fillRect(x+e.w*0.6, y+e.h*0.5, 1, 1);
+    return;
+  }
+
+  // Animación de aleteo (cada 5 frames)
+  const wingPhase = (fc % 16) < 8 ? 0 : 1;
+  const wingOpen = wingPhase === 0;
+
+  // ── ALAS (membrana morada) ──
+  ctx.fillStyle = '#4a1a78';
+  if(wingOpen){
+    // Alas extendidas
+    // Ala izquierda
+    ctx.beginPath();
+    ctx.moveTo(x+e.w/2 - 2, y+5);
+    ctx.lineTo(x-6, y+1);
+    ctx.lineTo(x-3, y+5);
+    ctx.lineTo(x-7, y+8);
+    ctx.lineTo(x-2, y+9);
+    ctx.lineTo(x+e.w/2 - 2, y+8);
+    ctx.closePath();
+    ctx.fill();
+    // Ala derecha
+    ctx.beginPath();
+    ctx.moveTo(x+e.w/2 + 2, y+5);
+    ctx.lineTo(x+e.w+6, y+1);
+    ctx.lineTo(x+e.w+3, y+5);
+    ctx.lineTo(x+e.w+7, y+8);
+    ctx.lineTo(x+e.w+2, y+9);
+    ctx.lineTo(x+e.w/2 + 2, y+8);
+    ctx.closePath();
+    ctx.fill();
+    // Detalles de las alas (líneas más claras de las "venas")
+    ctx.strokeStyle = '#6a2898';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(x+e.w/2-2, y+6); ctx.lineTo(x-4, y+3);
+    ctx.moveTo(x+e.w/2-2, y+6); ctx.lineTo(x-2, y+8);
+    ctx.moveTo(x+e.w/2+2, y+6); ctx.lineTo(x+e.w+4, y+3);
+    ctx.moveTo(x+e.w/2+2, y+6); ctx.lineTo(x+e.w+2, y+8);
+    ctx.stroke();
+  } else {
+    // Alas plegadas hacia arriba (movimiento del aleteo)
+    ctx.beginPath();
+    ctx.moveTo(x+e.w/2 - 2, y+5);
+    ctx.lineTo(x+1, y-3);
+    ctx.lineTo(x+4, y+1);
+    ctx.lineTo(x+e.w/2 - 2, y+7);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x+e.w/2 + 2, y+5);
+    ctx.lineTo(x+e.w-1, y-3);
+    ctx.lineTo(x+e.w-4, y+1);
+    ctx.lineTo(x+e.w/2 + 2, y+7);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // ── CUERPO (cuerpo central peludo) ──
+  ctx.fillStyle = '#2a1040';
+  ctx.beginPath();
+  ctx.roundRect(x+e.w/2 - 4, y+3, 8, 8, 3);
+  ctx.fill();
+  // Brillo del cuerpo
+  ctx.fillStyle = '#4a2060';
+  ctx.fillRect(x+e.w/2 - 3, y+4, 6, 2);
+
+  // ── CABEZA ──
+  ctx.fillStyle = '#2a1040';
+  ctx.beginPath();
+  ctx.arc(x+e.w/2, y+3, 4, 0, Math.PI*2);
+  ctx.fill();
+
+  // Orejas puntiagudas
+  ctx.fillStyle = '#2a1040';
+  ctx.beginPath();
+  ctx.moveTo(x+e.w/2 - 3, y+1);
+  ctx.lineTo(x+e.w/2 - 4, y-3);
+  ctx.lineTo(x+e.w/2 - 1, y+1);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(x+e.w/2 + 3, y+1);
+  ctx.lineTo(x+e.w/2 + 4, y-3);
+  ctx.lineTo(x+e.w/2 + 1, y+1);
+  ctx.fill();
+  // Interior orejas (rosado)
+  ctx.fillStyle = '#a04060';
+  ctx.beginPath();
+  ctx.moveTo(x+e.w/2 - 2.5, y+0.5);
+  ctx.lineTo(x+e.w/2 - 3.5, y-2);
+  ctx.lineTo(x+e.w/2 - 1.5, y+0.5);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(x+e.w/2 + 2.5, y+0.5);
+  ctx.lineTo(x+e.w/2 + 3.5, y-2);
+  ctx.lineTo(x+e.w/2 + 1.5, y+0.5);
+  ctx.fill();
+
+  // ── OJOS ROJOS BRILLANTES ──
+  const glow = 0.7 + Math.sin(fc*0.2)*0.3;
+  ctx.fillStyle = `rgba(255,${60+30*glow},${40+20*glow},1)`;
+  ctx.beginPath();
+  ctx.arc(x+e.w/2 - 1.5, y+3, 1.2, 0, Math.PI*2);
+  ctx.arc(x+e.w/2 + 1.5, y+3, 1.2, 0, Math.PI*2);
+  ctx.fill();
+  // Brillito blanco
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(x+e.w/2 - 1.8, y+2.5, 0.6, 0.6);
+  ctx.fillRect(x+e.w/2 + 1.2, y+2.5, 0.6, 0.6);
+
+  // Boca con colmillitos
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.moveTo(x+e.w/2 - 1, y+5);
+  ctx.lineTo(x+e.w/2 - 0.5, y+6.5);
+  ctx.lineTo(x+e.w/2 - 0.2, y+5.5);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(x+e.w/2 + 1, y+5);
+  ctx.lineTo(x+e.w/2 + 0.5, y+6.5);
+  ctx.lineTo(x+e.w/2 + 0.2, y+5.5);
+  ctx.fill();
 }
 
 
