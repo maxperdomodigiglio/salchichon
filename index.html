@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0a0612">
 <meta name="description" content="Super Dachshund Bros — un juego de plataformas con perros salchicha, gatos y carpinchos.">
-<title>Super Dachshund Bros · 4 Mundos</title>
+<title>Super Dachshund Bros · 5 Mundos</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 html,body{
@@ -39,6 +39,7 @@ html,body{
 #hud .lvl2{color:#c89cff;}
 #hud .lvl3{color:#7df0c8;}
 #hud .lvl4{color:#7dd0ff;}
+#hud .lvl5{color:#9affb0;}
 #hud .lives-icons{letter-spacing:2px;font-size:16px;}
 #h-bones-mini{
   display:inline-block;width:16px;height:6px;background:#ffd34d;
@@ -282,7 +283,7 @@ button.action-btn.secondary{
     <div><span>Bloque ?</span> Golpear desde abajo</div>
     <div><span>P</span> Pausa</div>
   </div>
-  <p class="hint">4 MUNDOS — Pradera · Caverna · Wonder Wiener · Nordeltopolis</p>
+  <p class="hint">5 MUNDOS — Pradera · Caverna · Wonder Wiener · Nordeltopolis · Pantano Nocturno</p>
   <button class="action-btn" id="btn-start">▶ JUGAR AHORA</button>
 </div>
 
@@ -443,6 +444,7 @@ function initLevel(lvl){
   else if(lvl===2) buildLevel2();
   else if(lvl===3) buildLevel3();
   else if(lvl===4) buildLevel4();
+  else if(lvl===5) buildLevel5();
   hud();
 }
 
@@ -451,12 +453,13 @@ function hud(){
   document.getElementById('h-bones').textContent = bones;
   const lvlEl = document.getElementById('h-level');
   lvlEl.textContent = level;
-  lvlEl.className = level===2?'val lvl2':level===3?'val lvl3':level===4?'val lvl4':'val';
+  lvlEl.className = level===2?'val lvl2':level===3?'val lvl3':level===4?'val lvl4':level===5?'val lvl5':'val';
   const titles = [
     '★ MUNDO 1 · PRADERA',
     '★ MUNDO 2 · CAVERNA',
     '★ MUNDO 3 · WONDER WIENER',
-    '★ MUNDO 4 · NORDELTOPOLIS'
+    '★ MUNDO 4 · NORDELTOPOLIS',
+    '★ MUNDO 5 · PANTANO NOCTURNO'
   ];
   document.getElementById('h-title').textContent = titles[level-1] || '★ SUPER DACHSHUND';
   const ammoEl = document.getElementById('h-ammo');
@@ -766,24 +769,26 @@ function buildLevel2(){
   // Huesos en suelo (zona transitable)
   [4,18,38,53,73,87,100,127,135,156].forEach(x => addBone(x, 10));
 
-  // Enemigos — más naturales, patrol y velocidades variadas
-  [13, 27, 43, 57, 75, 87, 100, 113, 124, 137, 152].forEach(ex => {
+  // Enemigos — +20% dificultad: más rápidos, MÁS gatos, y patrullan TODO el mapa
+  // (patrolRange enorme = se mueven libremente por todo el nivel)
+  const N2_GLOBAL_PATROL = 999*TILE;
+  [10, 13, 18, 27, 36, 43, 50, 57, 66, 75, 82, 87, 95, 100, 108, 113, 120, 124, 130, 137, 144, 152, 160].forEach(ex => {
     const dir = Math.random()>0.5?1:-1;
     enemies.push({
       x:ex*TILE, y:10*TILE,
       w:18, h:16,
-      vx: 0.6*dir, vy:0, dir: dir,
+      vx: 0.72*dir, vy:0, dir: dir,
       alive:true, dead:false, deadT:0, fr:0, ft:0,
       type:'jump', kind:'cat',
-      baseSpd:0.6,
-      jumpT: 80+(Math.random()*70|0),
+      baseSpd:0.72,
+      jumpT: 70+(Math.random()*60|0),
       onGround:false,
       breathT: Math.random()*Math.PI*2,
-      homeX: ex*TILE, patrolRange: 3*TILE
+      homeX: ex*TILE, patrolRange: N2_GLOBAL_PATROL
     });
   });
-  [22, 38, 50, 70, 80, 95, 113, 128, 144].forEach(ex => {
-    addEnemy(ex, 11, {spd:0.85, patrol: 4*TILE});
+  [22, 30, 38, 50, 60, 70, 80, 88, 95, 105, 113, 122, 128, 136, 144].forEach(ex => {
+    addEnemy(ex, 11, {spd:1.02, patrol: N2_GLOBAL_PATROL});
   });
 
   // ── SALA DEL JEFE ──
@@ -940,55 +945,55 @@ function buildLevel3(){
   }
   window._flagX = 268*TILE;
 
-  // ── ENEMIGOS ──
-  // Gatos pequeños (caminantes y saltarines, más pequeños que en niveles 1-2)
-  [22, 30, 39, 56, 67, 85, 96, 122, 134, 159, 172, 186, 220, 232, 245].forEach(ex=>{
+  // ── ENEMIGOS — DIFICULTAD +30% (más rápidos y más enemigos) ──
+  // Gatos pequeños (caminantes, más pequeños que en niveles 1-2)
+  [22, 30, 39, 47, 56, 67, 76, 85, 96, 105, 122, 134, 145, 159, 172, 186, 198, 210, 220, 232, 245].forEach(ex=>{
     const dir = Math.random()>0.5?1:-1;
     enemies.push({
       x:ex*TILE, y:10*TILE,
       w:14, h:13,
-      vx: 0.7*dir, vy:0, dir: dir,
+      vx: 0.91*dir, vy:0, dir: dir,
       alive:true, dead:false, deadT:0, fr:0, ft:0,
       type:'walk', kind:'cat',
-      baseSpd:0.7,
+      baseSpd:0.91,
       jumpT:0,
       onGround:false,
       breathT: Math.random()*Math.PI*2,
       small:true,
-      homeX: ex*TILE, patrolRange: 3*TILE
+      homeX: ex*TILE, patrolRange: 4*TILE
     });
   });
-  // Gatos saltarines pequeños (mini desafío)
-  [60, 110, 175, 215].forEach(ex=>{
+  // Gatos saltarines pequeños (mini desafío) — más cantidad
+  [60, 90, 110, 140, 175, 200, 215, 240].forEach(ex=>{
     const dir = Math.random()>0.5?1:-1;
     enemies.push({
       x:ex*TILE, y:10*TILE,
       w:14, h:13,
-      vx: 0.6*dir, vy:0, dir: dir,
+      vx: 0.78*dir, vy:0, dir: dir,
       alive:true, dead:false, deadT:0, fr:0, ft:0,
       type:'jump', kind:'cat',
-      baseSpd:0.6,
-      jumpT: 60+(Math.random()*40|0),
+      baseSpd:0.78,
+      jumpT: 50+(Math.random()*35|0),
       onGround:false,
       breathT:0, small:true,
-      homeX: ex*TILE, patrolRange: 2.5*TILE
+      homeX: ex*TILE, patrolRange: 3*TILE
     });
   });
-  // Ardillas pequeñas (rápidas y se mueven en zigzag, también peligrosas)
-  [48, 80, 130, 180, 224].forEach(ex=>{
+  // Ardillas pequeñas (rápidas y se mueven en zigzag) — más rápidas
+  [48, 80, 115, 130, 160, 180, 195, 224, 250].forEach(ex=>{
     const dir = Math.random()>0.5?1:-1;
     enemies.push({
       x:ex*TILE, y:10*TILE,
       w:14, h:12,
-      vx: 1.1*dir, vy:0, dir: dir,
+      vx: 1.43*dir, vy:0, dir: dir,
       alive:true, dead:false, deadT:0, fr:0, ft:0,
       type:'walk', kind:'squirrel',
-      baseSpd:1.1,
-      jumpT: 50+(Math.random()*30|0),
+      baseSpd:1.43,
+      jumpT: 40+(Math.random()*25|0),
       onGround:false,
       breathT: Math.random()*Math.PI*2,
       small:true,
-      homeX: ex*TILE, patrolRange: 3.5*TILE
+      homeX: ex*TILE, patrolRange: 4*TILE
     });
   });
 }
@@ -1124,19 +1129,19 @@ function buildLevel4(){
     });
   });
 
-  // ── CARPINCHOS — lentos pero tan peligrosos como gatos del nivel 2 ──
+  // ── CARPINCHOS — DIFICULTAD +40% (más cantidad y +40% velocidad) ──
   // Algunos en islas (terrestres), otros en el agua (acuáticos)
   // ATENCIÓN: la isla inicial (1-8) DEBE estar libre. El primer carpincho
   // aparece a partir de la isla 3 (x≈22) para dar tiempo al jugador.
-  [22, 39, 58, 67, 86, 95, 113, 138, 149, 167, 178, 188].forEach(ex=>{
+  [22, 31, 39, 48, 58, 67, 77, 86, 95, 104, 113, 123, 130, 138, 149, 158, 167, 178, 188].forEach(ex=>{
     const dir = Math.random()>0.5?1:-1;
     enemies.push({
       x:ex*TILE, y:10*TILE,
       w:24, h:18,
-      vx: 0.35*dir, vy:0, dir: dir,
+      vx: 0.49*dir, vy:0, dir: dir,
       alive:true, dead:false, deadT:0, fr:0, ft:0,
       type:'walk', kind:'capi',
-      baseSpd:0.35,
+      baseSpd:0.49,
       jumpT:0,
       onGround:false,
       breathT: Math.random()*Math.PI*2,
@@ -1144,18 +1149,17 @@ function buildLevel4(){
       waterEnemy:false
     });
   });
-  // Capi acuático — flota en el agua, sigue al jugador horizontal
-  // ATENCIÓN: el primer acuático aparece a partir de x=27 para que el
-  // jugador tenga margen. Antes había uno en x=10 que mataba apenas spawneaba.
-  [27, 53, 75, 100, 134, 155, 184].forEach(ex=>{
+  // Capi acuático — flota en el agua, sigue al jugador horizontal (+40% velocidad, más cantidad)
+  // ATENCIÓN: el primer acuático aparece a partir de x=27 para que el jugador tenga margen.
+  [27, 45, 53, 65, 75, 88, 100, 118, 134, 148, 155, 172, 184].forEach(ex=>{
     const dir = Math.random()>0.5?1:-1;
     enemies.push({
       x:ex*TILE, y: water.surfaceY - 12,
       w:24, h:14,
-      vx: 0.28*dir, vy:0, dir: dir,
+      vx: 0.39*dir, vy:0, dir: dir,
       alive:true, dead:false, deadT:0, fr:0, ft:0,
       type:'water', kind:'capi',
-      baseSpd:0.28,
+      baseSpd:0.39,
       jumpT:0,
       onGround:false,
       breathT: Math.random()*Math.PI*2,
@@ -1165,6 +1169,196 @@ function buildLevel4(){
     });
   });
 }
+
+
+// ═══════════════════════════════════════════════════════════════
+//  NIVEL 5 — PANTANO NOCTURNO
+//  Mundo nocturno con aguas pantanosas oscuras.
+//  Saltar entre islas; carpinchos en las islas; cocodrilos en
+//  el agua moviéndose de izquierda a derecha (de atrás hacia adelante);
+//  algunos cocodrilos llevan un carpincho encima. Los animales del agua
+//  NO pueden matarse (igual que carpinchos acuáticos del N4).
+//  Al final: rescate de Frankie, la salchicha hembra.
+// ═══════════════════════════════════════════════════════════════
+function buildLevel5(){
+  tiles=[]; enemies=[]; items=[]; parts=[];
+  window._flagX = 99999999;
+  window._artifacts = [];
+  window._queenLulu = null;
+  window._frankie = null;
+  // Agua pantanosa: si caes, mueres (mismo sistema que nivel 4)
+  water = { y: 12*TILE, surfaceY: 11*TILE + 6, swamp: true };
+
+  // Islas (más pequeñas y separadas que el nivel 4, mayor dificultad de salto)
+  const islands = [
+    [1,   9,   11],  // isla inicial grande (segura)
+    [13,  17,  11],
+    [21,  25,  11],
+    [29,  33,  10],  // algo más alta
+    [37,  41,  11],
+    [45,  50,  11],
+    [54,  58,  11],
+    [62,  67,  10],
+    [71,  75,  11],
+    [79,  84,  11],
+    [88,  92,  11],
+    [96,  101, 10],
+    [105, 110, 11],
+    [114, 119, 11],
+    [123, 128, 11],
+    [132, 138, 11],
+    [142, 147, 10],
+    [151, 156, 11],
+    [160, 166, 11],
+    [170, 176, 11],
+    [180, 188, 11]   // isla final - rescate
+  ];
+
+  // Construir islas
+  islands.forEach(([xi, xf, top])=>{
+    for(let x=xi; x<=xf; x++){
+      T(x, top, 'grassIsle');
+      for(let y=top+1; y<=12; y++) T(x, y, 'sld');
+    }
+  });
+
+  // Algunas pasarelas opcionales sobre saltos más largos
+  for(let x=42; x<=44; x++) T(x, 11, 'bridge');
+  for(let x=85; x<=87; x++) T(x, 11, 'bridge');
+  for(let x=129; x<=131; x++) T(x, 11, 'bridge');
+
+  // Bloques '?' con munición y vidas extra
+  T(15, 8, 'qb');
+  T(31, 7, 'qbLife');     // 1ª vida extra
+  T(47, 8, 'qb');
+  T(49, 8, 'qb');
+  T(64, 7, 'qb');
+  T(81, 8, 'qb');
+  T(98, 7, 'qb');
+  T(116, 8, 'qb');
+  T(125, 8, 'qbLife');    // 2ª vida extra
+  T(144, 7, 'qb');
+  T(163, 8, 'qb');
+  T(173, 8, 'qb');
+
+  // Plataformas decorativas (piedras musgosas / troncos sobre el agua)
+  for(let x=18; x<=20; x++) T(x, 8, 'sld');
+  for(let x=51; x<=53; x++) T(x, 9, 'sld');
+  for(let x=68; x<=70; x++) T(x, 8, 'sld');
+  for(let x=102; x<=104; x++) T(x, 8, 'sld');
+  for(let x=139; x<=141; x++) T(x, 9, 'sld');
+  for(let x=167; x<=169; x++) T(x, 8, 'sld');
+
+  // Bandera al final (isla 180-188)
+  for(let s=0; s<6; s++){
+    for(let r=0; r<=s; r++) T(181+s, 10-r, 'sld');
+  }
+  for(let r=0; r<12; r++){
+    tiles.push({x:187*TILE, y:r*TILE, w:4, h:TILE, t:'pole', hit:false});
+  }
+  window._flagX = 187*TILE;
+
+  // ── FRANKIE — salchicha hembra esperando ser rescatada ──
+  // Ubicada en la isla final, justo antes de la bandera
+  window._frankie = {
+    x: 184*TILE, y: 10*TILE - 16,
+    w: 26, h: 16,
+    bobT: 0, blinkT: 0, rescued: false
+  };
+
+  // ── HUESOS — distribuidos sobre las islas ──
+  [
+    [3,10],[5,10],[7,10],[9,10],
+    [14,10],[16,10],
+    [22,10],[24,10],
+    [30,9],[32,9],
+    [38,10],[40,10],
+    [46,10],[48,10],[50,10],
+    [55,10],[57,10],
+    [63,9],[65,9],[67,9],
+    [72,10],[74,10],
+    [80,10],[82,10],[84,10],
+    [89,10],[91,10],
+    [97,9],[99,9],[101,9],
+    [106,10],[108,10],[110,10],
+    [115,10],[117,10],[119,10],
+    [124,10],[126,10],[128,10],
+    [133,10],[135,10],[137,10],
+    [143,9],[145,9],[147,9],
+    [152,10],[154,10],[156,10],
+    [161,10],[163,10],[165,10],
+    [171,10],[173,10],[175,10],
+    [181,10],[183,10],[185,10]
+  ].forEach(([x,y]) => addBone(x,y));
+
+  // ── ARTEFACTOS — juncos y nenúfares decorativos ──
+  [[27,9,'reed'], [60,9,'buoy'], [94,9,'reed'], [149,9,'buoy'], [178,9,'reed']].forEach(([x,y,kind])=>{
+    window._artifacts.push({
+      x:x*TILE+4, y:y*TILE+4, w:14, h:18, alive:true, kind, ft:0, decorative:true
+    });
+  });
+
+  // ── CARPINCHOS EN ISLAS ──
+  // Patrullan las islas (terrestres, mortales como en N4)
+  // Saltamos la isla inicial (1-9) para dar margen.
+  [14, 22, 30, 38, 47, 55, 64, 72, 81, 89, 98, 107, 115, 124, 133, 143, 152, 162, 171].forEach(ex=>{
+    const dir = Math.random()>0.5?1:-1;
+    enemies.push({
+      x:ex*TILE, y:10*TILE,
+      w:24, h:18,
+      vx: 0.45*dir, vy:0, dir: dir,
+      alive:true, dead:false, deadT:0, fr:0, ft:0,
+      type:'walk', kind:'capi',
+      baseSpd:0.45,
+      jumpT:0,
+      onGround:false,
+      breathT: Math.random()*Math.PI*2,
+      homeX: ex*TILE, patrolRange: 3*TILE,
+      waterEnemy:false
+    });
+  });
+
+  // ── COCODRILOS EN EL AGUA ──
+  // Se desplazan SIEMPRE de izquierda a derecha (de atrás hacia adelante).
+  // Al llegar al borde derecho de la pantalla, reaparecen por la izquierda.
+  // Algunos llevan un carpincho encima (decorativo, parte del mismo sprite).
+  // NO se pueden matar (igual que carpinchos acuáticos N4).
+  const crocSpawns = [
+    [12,  false],
+    [20,  true],   // con carpincho encima
+    [35,  false],
+    [50,  false],
+    [60,  true],   // con carpincho encima
+    [76,  false],
+    [88,  false],
+    [100, true],   // con carpincho encima
+    [112, false],
+    [122, false],
+    [135, true],   // con carpincho encima
+    [148, false],
+    [160, false],
+    [172, true]    // con carpincho encima
+  ];
+  crocSpawns.forEach(([ex, hasRider])=>{
+    enemies.push({
+      x:ex*TILE, y: water.surfaceY - 10,
+      w:42, h:16,
+      vx: 0.6, vy:0, dir: 1,  // SIEMPRE hacia la derecha
+      alive:true, dead:false, deadT:0, fr:0, ft:0,
+      type:'croc', kind:'croc',
+      baseSpd:0.6,
+      jumpT:0,
+      onGround:false,
+      breathT: Math.random()*Math.PI*2,
+      homeX: ex*TILE, patrolRange: 0,
+      waterEnemy:true,
+      waterY: water.surfaceY - 10,
+      hasRider: hasRider,
+      mouthT: Math.random()*60|0  // animación de boca abriendo
+    });
+  });
+}
+
 
 
 // ═══════════════════════════════════════════════════════════════
@@ -1286,19 +1480,20 @@ function updatePlayer(){
   resolveY(P, t => hitBlock(t));
   if(P.onGround) P.jumping = false;
 
-  // Caída en agua (nivel 4) o caída fuera del mapa
-  if(level === 4 && water && P.y > water.surfaceY - 4){
+  // Caída en agua (nivel 4 o 5) o caída fuera del mapa
+  if((level === 4 || level === 5) && water && P.y > water.surfaceY - 4){
     if(!P.dead){
       P.dead = true;
       cam.shakeT = 14;
-      // Salpicadura
+      // Salpicadura — color depende si es pantano (verdoso) o agua (azul)
+      const isSwamp = water.swamp === true;
       for(let i=0;i<22;i++){
         parts.push({
           x:P.x+P.w/2 + (Math.random()-0.5)*16,
           y:water.surfaceY,
           vx:(Math.random()-0.5)*5,
           vy:-Math.random()*5-1,
-          col: i%2 ? '#7dd0ff' : '#ffffff',
+          col: i%2 ? (isSwamp?'#5da050':'#7dd0ff') : (isSwamp?'#a0c890':'#ffffff'),
           life:30, ml:46, sz:3
         });
       }
@@ -1435,6 +1630,37 @@ function updateEnemies(){
       continue;
     }
 
+    // ─── COCODRILO (nivel 5) ───
+    // Se mueve SIEMPRE de izquierda a derecha. Al salir por la derecha,
+    // reaparece por la izquierda (loop). NO se puede matar.
+    if(e.type === 'croc'){
+      e.y = e.waterY + Math.sin(fc * 0.05 + e.breathT) * 1.5;
+      e.x += e.baseSpd;
+      e.dir = 1;
+      e.mouthT++;
+      // Loop: si sale del mundo por la derecha, vuelve por la izquierda
+      const worldR = (window._flagX || 200*TILE) + 100;
+      if(e.x > worldR){
+        e.x = -e.w - 40 - (Math.random()*120|0);
+      }
+      // Colisión con jugador
+      if(!P.dead && P.inv === 0 && active){
+        // hitbox un poco más chica que el sprite
+        const hb = {x:e.x+4, y:e.y+2, w:e.w-8, h:e.h-4};
+        if(aabb(P, hb)){
+          if(P.vy > 0.5 && P.y + P.h < e.y + e.h*0.5){
+            // Saltar sobre el cocodrilo: rebota pero NO muere (igual que carpincho de agua)
+            P.vy = -6;
+            burst(e.x+e.w/2, e.y, '#88dd88', 10);
+          } else {
+            P.dead = true;
+            burst(P.x+P.w/2, P.y+P.h/2, '#ff4040', 16);
+          }
+        }
+      }
+      continue;
+    }
+
     // ─── ENEMIGOS TERRESTRES ───
     if(!active){
       // Fuera de pantalla: solo aplica gravedad para no flotar
@@ -1536,7 +1762,7 @@ function updateEnemies(){
 
     // ─── CAÍDA AL VACÍO O AGUA ───
     if(e.y > CH + 30){ e.alive = false; continue; }
-    if(level === 4 && water && e.y + e.h > water.surfaceY + 4){
+    if((level === 4 || level === 5) && water && e.y + e.h > water.surfaceY + 4){
       e.alive = false; continue;
     }
 
@@ -1805,6 +2031,11 @@ function checkFlag(){
         'CONTINUAR',
         ()=>{ initLevel(4); });
     } else if(level === 4){
+      showMsg('¡NIVEL 4 COMPLETO!',
+        '¡Lulu rescatada! Pero un nuevo peligro acecha de noche...',
+        'CONTINUAR',
+        ()=>{ initLevel(5); });
+    } else if(level === 5){
       setTimeout(()=>{
         showFinalVictory();
       }, 400);
@@ -2195,11 +2426,47 @@ function renderBG4(c){
     c.fillRect(CW*0.7-30+i*4, CH*0.85-i*4, 60-i*8, 2);
   }
 }
+function renderBG5(c){
+  // Cielo nocturno pantanoso
+  const g = c.createLinearGradient(0, 0, 0, CH);
+  g.addColorStop(0, '#0a0a1e');
+  g.addColorStop(0.4, '#1a2030');
+  g.addColorStop(0.7, '#2a3a3a');
+  g.addColorStop(1, '#1a2a1a');
+  c.fillStyle = g;
+  c.fillRect(0, 0, CW, CH);
+  // Luna grande con halo
+  c.fillStyle = 'rgba(255,250,210,0.18)';
+  c.beginPath(); c.arc(CW*0.75, CH*0.22, 70, 0, Math.PI*2); c.fill();
+  c.fillStyle = 'rgba(255,250,210,0.45)';
+  c.beginPath(); c.arc(CW*0.75, CH*0.22, 42, 0, Math.PI*2); c.fill();
+  c.fillStyle = '#fefad8';
+  c.beginPath(); c.arc(CW*0.75, CH*0.22, 28, 0, Math.PI*2); c.fill();
+  // Cráteres de la luna
+  c.fillStyle = 'rgba(180,170,140,0.4)';
+  c.beginPath(); c.arc(CW*0.75-7, CH*0.22-4, 4, 0, Math.PI*2); c.fill();
+  c.beginPath(); c.arc(CW*0.75+8, CH*0.22+5, 3, 0, Math.PI*2); c.fill();
+  c.beginPath(); c.arc(CW*0.75-3, CH*0.22+9, 2.5, 0, Math.PI*2); c.fill();
+  // Estrellas
+  c.fillStyle = '#fff';
+  for(let i=0;i<60;i++){
+    const sx = (i*37 + 11) % CW;
+    const sy = (i*23 + 7) % (CH*0.55);
+    const sz = (i%7===0) ? 2 : 1;
+    c.fillRect(sx, sy, sz, sz);
+  }
+  // Reflejo de luna en el agua (zona inferior)
+  c.fillStyle = 'rgba(255,250,210,0.12)';
+  for(let i=0;i<8;i++){
+    c.fillRect(CW*0.75-30+i*4, CH*0.85-i*4, 60-i*8, 2);
+  }
+}
 function refreshBG(){
   if(level===1) renderBG1(bgCtx);
   else if(level===2) renderBG2(bgCtx);
   else if(level===3) renderBG3(bgCtx);
   else if(level===4) renderBG4(bgCtx);
+  else if(level===5) renderBG5(bgCtx);
   bgDirty = false;
 }
 
@@ -2371,6 +2638,87 @@ function drawParallax(){
         ctx.fillRect(CW*0.65 - i*8 + wave, wy + i*8, 80 - i*10, 1);
       }
     }
+  } else if(level===5){
+    // ── NIVEL 5: PANTANO NOCTURNO ──
+    // Niebla baja flotante
+    ctx.fillStyle = 'rgba(120,160,140,0.08)';
+    ctx.fillRect(0, CH*0.55, CW, CH*0.25);
+    ctx.fillStyle = 'rgba(180,200,170,0.06)';
+    for(let i=0;i<6;i++){
+      const px = ((i*180 - cam.x*0.08) % (CW+200) + CW+200) % (CW+200) - 100;
+      const py = CH*0.55 + (i%3)*8;
+      ctx.beginPath();
+      ctx.ellipse(px, py, 80, 14, 0, 0, Math.PI*2);
+      ctx.fill();
+    }
+    // Árboles muertos / siluetas en el fondo (silueta negra contra la luna)
+    ctx.fillStyle = 'rgba(8,10,16,0.85)';
+    for(let i=0;i<10;i++){
+      const cx = i*210;
+      const px = ((cx - cam.x*0.25) % (CW+400) + CW+400) % (CW+400) - 200;
+      const baseY = CH - TILE*2;
+      const h = 75 + (i%4)*16;
+      // Tronco torcido
+      ctx.fillRect(px+4, baseY-h, 6, h);
+      // Ramas
+      ctx.beginPath();
+      ctx.moveTo(px+7, baseY-h);
+      ctx.lineTo(px-6, baseY-h-12);
+      ctx.lineTo(px+5, baseY-h-3);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(px+7, baseY-h+8);
+      ctx.lineTo(px+22, baseY-h-6);
+      ctx.lineTo(px+9, baseY-h+5);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(px+8, baseY-h-5);
+      ctx.lineTo(px+18, baseY-h-22);
+      ctx.lineTo(px+10, baseY-h-8);
+      ctx.fill();
+    }
+    // Luciérnagas flotantes (puntos verdes brillantes)
+    for(let i=0;i<22;i++){
+      const baseX = (i*87 + 30) % (CW+100);
+      const px = ((baseX - cam.x*0.6) % (CW+100) + CW+100) % (CW+100) - 50;
+      const py = 70 + ((i*53 + fc*0.35) % (CH-180));
+      const flick = 0.5 + 0.5*Math.sin(fc*0.1 + i*1.7);
+      ctx.fillStyle = `rgba(160,255,140,${0.6*flick})`;
+      ctx.beginPath(); ctx.arc(px, py, 1.6, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = `rgba(160,255,140,${0.18*flick})`;
+      ctx.beginPath(); ctx.arc(px, py, 4, 0, Math.PI*2); ctx.fill();
+    }
+    // ── AGUA PANTANOSA (verde oscuro) ──
+    if(water){
+      const wy = water.surfaceY;
+      const grad = ctx.createLinearGradient(0, wy, 0, CH);
+      grad.addColorStop(0, '#2d4a30');
+      grad.addColorStop(0.4, '#1a3320');
+      grad.addColorStop(1, '#0a1810');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, wy, CW, CH-wy);
+      // Ondas/burbujas verdes
+      ctx.fillStyle = 'rgba(160,220,140,0.25)';
+      for(let i=0;i<8;i++){
+        const wave = Math.sin(fc*0.035 + i*1.2 + cam.x*0.005) * 3;
+        const wx = ((i*88 - cam.x*0.5) % CW + CW) % CW;
+        ctx.fillRect(wx, wy + wave, 28, 1.5);
+      }
+      // Reflejo lunar verdoso
+      ctx.fillStyle = 'rgba(200,255,180,0.12)';
+      for(let i=0;i<6;i++){
+        const wave = Math.sin(fc*0.05 + i) * 3;
+        ctx.fillRect(CW*0.7 - i*8 + wave, wy + i*8, 60 - i*8, 1);
+      }
+      // Burbujas que suben
+      ctx.fillStyle = 'rgba(140,200,140,0.5)';
+      for(let i=0;i<6;i++){
+        const bx = ((i*123 - cam.x*0.3 + fc*0.4) % CW + CW) % CW;
+        const by = wy + 8 + ((fc*0.6 + i*40) % (CH-wy-8));
+        const r = 1 + (i%3);
+        ctx.beginPath(); ctx.arc(bx, by, r, 0, Math.PI*2); ctx.fill();
+      }
+    }
   }
 }
 
@@ -2539,7 +2887,8 @@ function drawEnemy(e){
   const x = e.x - cam.x, y = e.y;
   if(x < -40 || x > CW + 40) return;
 
-  if(e.kind === 'capi') drawCapincho(e, x, y);
+  if(e.kind === 'croc') drawCroc(e, x, y);
+  else if(e.kind === 'capi') drawCapincho(e, x, y);
   else if(e.kind === 'squirrel') drawSquirrel(e, x, y);
   else drawCat(e, x, y);
 }
@@ -2812,8 +3161,166 @@ function drawCapincho(e, x, y){
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  RENDER — JEFE
+//  RENDER — COCODRILO (nivel 5)
+//  Largo y bajo en el agua, va siempre hacia la derecha.
+//  Si hasRider=true, lleva un carpinchito encima.
 // ═══════════════════════════════════════════════════════════════
+function drawCroc(e, x, y){
+  // Ondas en el agua alrededor del cocodrilo
+  ctx.strokeStyle = 'rgba(180,220,160,0.5)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  const wave = Math.sin(fc*0.1 + e.breathT)*1.5;
+  ctx.ellipse(x+e.w/2, y+e.h+wave, e.w/2+5, 2, 0, 0, Math.PI*2);
+  ctx.stroke();
+
+  // Animación de boca abierta cada cierto tiempo
+  const mouthOpen = ((e.mouthT||0) % 120) < 30;
+
+  // Cuerpo largo verde oscuro
+  ctx.fillStyle = '#2d5a30';
+  ctx.beginPath();
+  ctx.roundRect(x+2, y+4, e.w-4, e.h-6, 4);
+  ctx.fill();
+  // Lomo más oscuro
+  ctx.fillStyle = '#1a3818';
+  ctx.fillRect(x+4, y+4, e.w-8, 3);
+  // Panza verde más clara
+  ctx.fillStyle = '#5da050';
+  ctx.fillRect(x+4, y+e.h-4, e.w-8, 2);
+
+  // Escamas/picos en el lomo
+  ctx.fillStyle = '#1a3818';
+  for(let i=0; i<5; i++){
+    const sx = x + 6 + i*((e.w-12)/5);
+    ctx.beginPath();
+    ctx.moveTo(sx, y+4);
+    ctx.lineTo(sx+2, y+1);
+    ctx.lineTo(sx+4, y+4);
+    ctx.fill();
+  }
+
+  // Cola triangular a la izquierda
+  ctx.fillStyle = '#2d5a30';
+  ctx.beginPath();
+  ctx.moveTo(x+2, y+6);
+  ctx.lineTo(x-6, y+9);
+  ctx.lineTo(x+2, y+e.h-2);
+  ctx.fill();
+  ctx.fillStyle = '#1a3818';
+  ctx.beginPath();
+  ctx.moveTo(x-3, y+8);
+  ctx.lineTo(x-6, y+9);
+  ctx.lineTo(x-3, y+11);
+  ctx.fill();
+
+  // Cabeza grande a la derecha (mira para adelante = a la derecha)
+  const hx = x + e.w - 14;
+  // Mandíbula superior
+  ctx.fillStyle = '#2d5a30';
+  ctx.beginPath();
+  ctx.roundRect(hx, y+3, 16, 6, 2);
+  ctx.fill();
+  // Mandíbula inferior (abierta o cerrada)
+  ctx.fillStyle = '#1f4220';
+  if(mouthOpen){
+    // Boca abierta - mostrando dientes
+    ctx.beginPath();
+    ctx.roundRect(hx+2, y+10, 13, 4, 2);
+    ctx.fill();
+    // Interior rosa
+    ctx.fillStyle = '#a04040';
+    ctx.fillRect(hx+3, y+9, 11, 2);
+    // Dientes (zigzag)
+    ctx.fillStyle = '#fff';
+    for(let i=0; i<5; i++){
+      ctx.beginPath();
+      ctx.moveTo(hx+3+i*2.5, y+9);
+      ctx.lineTo(hx+4+i*2.5, y+11);
+      ctx.lineTo(hx+5+i*2.5, y+9);
+      ctx.fill();
+    }
+    // Dientes inferiores
+    for(let i=0; i<5; i++){
+      ctx.beginPath();
+      ctx.moveTo(hx+3+i*2.5, y+11);
+      ctx.lineTo(hx+4+i*2.5, y+9);
+      ctx.lineTo(hx+5+i*2.5, y+11);
+      ctx.fill();
+    }
+  } else {
+    // Boca cerrada
+    ctx.beginPath();
+    ctx.roundRect(hx+2, y+8, 13, 3, 1);
+    ctx.fill();
+    // Línea de la boca
+    ctx.strokeStyle = '#0a1a0a';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(hx+3, y+9);
+    ctx.lineTo(hx+14, y+9);
+    ctx.stroke();
+    // Algunos dientecitos sobresaliendo
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(hx+5, y+9, 1, 1);
+    ctx.fillRect(hx+8, y+9, 1, 1);
+    ctx.fillRect(hx+11, y+9, 1, 1);
+  }
+
+  // Ojos saltones encima de la cabeza
+  ctx.fillStyle = '#1a3818';
+  ctx.beginPath();
+  ctx.arc(hx+5, y+2, 2.2, 0, Math.PI*2);
+  ctx.arc(hx+11, y+2, 2.2, 0, Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = '#ffea60';
+  ctx.beginPath();
+  ctx.arc(hx+5, y+2, 1.5, 0, Math.PI*2);
+  ctx.arc(hx+11, y+2, 1.5, 0, Math.PI*2);
+  ctx.fill();
+  // Pupilas verticales (reptilianas)
+  ctx.fillStyle = '#000';
+  ctx.fillRect(hx+4.5, y+1, 1, 2.5);
+  ctx.fillRect(hx+10.5, y+1, 1, 2.5);
+
+  // Fosas nasales en la punta del hocico
+  ctx.fillStyle = '#000';
+  ctx.fillRect(hx+14, y+4, 1, 1);
+  ctx.fillRect(hx+14, y+6, 1, 1);
+
+  // ── CARPINCHO ENCIMA (si hasRider) ──
+  if(e.hasRider){
+    const cx = x + e.w/2 - 8;
+    const cy = y - 12;
+    // Cuerpo del carpincho mini
+    ctx.fillStyle = '#94642a';
+    ctx.beginPath();
+    ctx.roundRect(cx, cy+2, 16, 10, 3);
+    ctx.fill();
+    // Panza
+    ctx.fillStyle = '#b08440';
+    ctx.fillRect(cx+1, cy+7, 14, 4);
+    // Cabeza
+    ctx.fillStyle = '#8a5824';
+    ctx.fillRect(cx+2, cy, 12, 4);
+    // Hocico
+    ctx.fillStyle = '#704418';
+    ctx.fillRect(cx+5, cy+3, 6, 2);
+    // Ojitos
+    ctx.fillStyle = '#000';
+    ctx.fillRect(cx+4, cy+1, 1.5, 1.5);
+    ctx.fillRect(cx+10, cy+1, 1.5, 1.5);
+    // Orejitas
+    ctx.fillStyle = '#5a3818';
+    ctx.fillRect(cx+3, cy-1, 1.5, 1.5);
+    ctx.fillRect(cx+11, cy-1, 1.5, 1.5);
+    // Sombra leve sobre el cocodrilo donde se apoya
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.fillRect(cx, cy+11, 16, 1);
+  }
+}
+
+
 function drawBoss(){
   if(!boss || !boss.alive) return;
   const x = boss.x - cam.x, y = boss.y;
@@ -3205,6 +3712,181 @@ function drawQueenLulu(){
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  RENDER — FRANKIE (salchicha hembra, rescate del nivel 5)
+// ═══════════════════════════════════════════════════════════════
+function drawFrankie(){
+  if(!window._frankie) return;
+  const f = window._frankie;
+  const screenX = f.x - cam.x;
+  if(screenX < -40 || screenX > CW + 40) return;
+  f.bobT = (f.bobT || 0) + 0.06;
+  f.blinkT = (f.blinkT || 0) + 1;
+  const bob = Math.sin(f.bobT) * 1.5;
+  const x = screenX, y = f.y + bob;
+
+  // Aura rosa brillante
+  const glow = 0.5 + Math.sin(fc*0.07)*0.5;
+  ctx.fillStyle = 'rgba(255,150,180,'+(0.15+glow*0.12)+')';
+  ctx.beginPath();
+  ctx.arc(x+f.w/2, y+f.h/2, 30, 0, Math.PI*2);
+  ctx.fill();
+
+  // Sombra
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(x+f.w/2, y+f.h+2, f.w/2, 2.5, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // Cuerpo largo de salchicha (rosa-marrón claro, femenina)
+  ctx.fillStyle = '#d4805a';
+  ctx.beginPath();
+  ctx.roundRect(x+1, y+5, f.w-2, 9, 4);
+  ctx.fill();
+  // Brillo en el lomo
+  ctx.fillStyle = '#e89a78';
+  ctx.beginPath();
+  ctx.roundRect(x+2, y+5, f.w-4, 3, 2);
+  ctx.fill();
+  // Panza más clara
+  ctx.fillStyle = '#f0b890';
+  ctx.fillRect(x+3, y+10, f.w-6, 3);
+
+  // Patitas
+  ctx.fillStyle = '#a86038';
+  ctx.fillRect(x+4, y+13, 3, 3);
+  ctx.fillRect(x+f.w-7, y+13, 3, 3);
+  // Detalles pinta de uñas rosa
+  ctx.fillStyle = '#ff5599';
+  ctx.fillRect(x+4.5, y+15, 2, 1);
+  ctx.fillRect(x+f.w-6.5, y+15, 2, 1);
+
+  // Cabeza (a la derecha, mirando al jugador)
+  const hx = x + f.w - 11;
+  ctx.fillStyle = '#d4805a';
+  ctx.beginPath();
+  ctx.roundRect(hx, y, 11, 10, 4);
+  ctx.fill();
+  // Hocico
+  ctx.fillStyle = '#a86038';
+  ctx.beginPath();
+  ctx.roundRect(hx+8, y+4, 5, 4, 2);
+  ctx.fill();
+  // Nariz
+  ctx.fillStyle = '#1a1a1a';
+  ctx.beginPath();
+  ctx.arc(hx+12, y+5.5, 1.2, 0, Math.PI*2);
+  ctx.fill();
+  // Brillito nariz
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.arc(hx+11.7, y+5.1, 0.4, 0, Math.PI*2);
+  ctx.fill();
+
+  // Ojo con pestañas (parpadea cada cierto tiempo)
+  const blink = (f.blinkT % 180) < 8;
+  if(!blink){
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(hx+5, y+3, 1.8, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath();
+    ctx.arc(hx+5.3, y+3, 1.1, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(hx+5.1, y+2.7, 0.4, 0, Math.PI*2);
+    ctx.fill();
+    // Pestañas largas (toque femenino)
+    ctx.strokeStyle = '#1a1a1a';
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    ctx.moveTo(hx+3.8, y+1.5); ctx.lineTo(hx+3.2, y+0.5);
+    ctx.moveTo(hx+5, y+1); ctx.lineTo(hx+4.8, y+0);
+    ctx.moveTo(hx+6.2, y+1.5); ctx.lineTo(hx+6.5, y+0.5);
+    ctx.stroke();
+  } else {
+    // Ojo cerrado (parpadeo)
+    ctx.strokeStyle = '#1a1a1a';
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    ctx.moveTo(hx+3.8, y+3); ctx.lineTo(hx+6.2, y+3);
+    ctx.stroke();
+  }
+  // Cachete rosadito
+  ctx.fillStyle = 'rgba(255,150,170,0.6)';
+  ctx.beginPath();
+  ctx.arc(hx+4, y+6, 1.6, 0, Math.PI*2);
+  ctx.fill();
+
+  // Oreja caída
+  ctx.fillStyle = '#a86038';
+  ctx.beginPath();
+  ctx.ellipse(hx+2, y+3, 2.5, 5, -0.3, 0, Math.PI*2);
+  ctx.fill();
+
+  // Cola pequeña al lado izquierdo
+  ctx.fillStyle = '#d4805a';
+  ctx.save();
+  ctx.translate(x+1, y+7);
+  ctx.rotate(-0.5 + Math.sin(fc*0.15)*0.2);  // movimiento de colita
+  ctx.fillRect(-2, -5, 3, 7);
+  ctx.restore();
+
+  // ✨ MOÑO ROSA grande en la cabeza ✨
+  ctx.fillStyle = '#ff5599';
+  ctx.beginPath();
+  ctx.ellipse(hx+3, y-2, 3, 2.2, -0.3, 0, Math.PI*2);
+  ctx.ellipse(hx+8, y-2, 3, 2.2, 0.3, 0, Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = '#cc3377';
+  ctx.beginPath();
+  ctx.arc(hx+5.5, y-2, 1.2, 0, Math.PI*2);
+  ctx.fill();
+  // Brillito del moño
+  ctx.fillStyle = '#ffaacc';
+  ctx.beginPath();
+  ctx.ellipse(hx+2.5, y-2.5, 1, 0.6, -0.3, 0, Math.PI*2);
+  ctx.fill();
+
+  // Corazoncitos flotando alrededor cuando el jugador está cerca
+  const distToPlayer = Math.abs(P.x - f.x);
+  if(distToPlayer < 200){
+    const numHearts = 4;
+    for(let i=0; i<numHearts; i++){
+      const ang = fc*0.03 + i*(Math.PI*2/numHearts);
+      const r = 22 + Math.sin(fc*0.05 + i)*3;
+      const px = x + f.w/2 + Math.cos(ang) * r;
+      const py = y + f.h/2 + Math.sin(ang) * r;
+      const sz = 3;
+      ctx.fillStyle = 'rgba(255,128,170,0.9)';
+      ctx.beginPath();
+      ctx.arc(px-sz/3, py-sz/4, sz/2.5, 0, Math.PI*2);
+      ctx.arc(px+sz/3, py-sz/4, sz/2.5, 0, Math.PI*2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(px-sz/1.5, py);
+      ctx.lineTo(px, py+sz);
+      ctx.lineTo(px+sz/1.5, py);
+      ctx.fill();
+    }
+    // Nombre brillante
+    const alpha = Math.max(0.4, 1 - distToPlayer/200);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = '#ff80a0';
+    ctx.shadowColor = '#000';
+    ctx.shadowBlur = 4;
+    ctx.font = 'bold 11px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('♥ FRANKIE ♥', x+f.w/2, y - 10);
+    ctx.shadowBlur = 0;
+    ctx.textAlign = 'left';
+    ctx.restore();
+  }
+}
+
 function drawArtifacts(){
   if(!window._artifacts) return;
   for(const a of window._artifacts){
@@ -3331,7 +4013,8 @@ function drawLevelIntro(){
     {t:'MUNDO 1', s:'PRADERA SOLEADA', c:'#88e060'},
     {t:'MUNDO 2', s:'CAVERNA NOCTURNA', c:'#a060ff'},
     {t:'MUNDO 3', s:'WONDER WIENER', c:'#40d8c0'},
-    {t:'MUNDO 4', s:'NORDELTOPOLIS', c:'#40a8ff'}
+    {t:'MUNDO 4', s:'NORDELTOPOLIS', c:'#40a8ff'},
+    {t:'MUNDO 5', s:'PANTANO NOCTURNO', c:'#9affb0'}
   ];
   const info = titles[level-1];
   if(!info) return;
@@ -3391,6 +4074,7 @@ function render(){
     else if(level === 2) renderBG2(bgCtx);
     else if(level === 3) renderBG3(bgCtx);
     else if(level === 4) renderBG4(bgCtx);
+    else if(level === 5) renderBG5(bgCtx);
     bgDirty = false;
   }
   ctx.drawImage(bgCanvas, 0, 0);
@@ -3412,6 +4096,7 @@ function render(){
   // artifacts (level 3 & 4 decorations)
   drawArtifacts();
   drawQueenLulu();
+  drawFrankie();
 
   // items (bones / golden / life)
   for(const it of items){
@@ -3651,12 +4336,12 @@ function showFinalVictory(){
   msg.innerHTML = `
     <div class="msg-card msg-card-win">
       <h2 class="msg-title">★ ¡VICTORIA TOTAL! ★</h2>
-      <p class="msg-sub">¡Rescataste a la Reina Lulu!</p>
+      <p class="msg-sub">¡Rescataste a Frankie, la salchicha hembra!</p>
       <div id="lulu-canvas-wrap" style="display:flex;justify-content:center;margin:8px 0 4px 0;">
-        <canvas id="lulu-final" width="160" height="120" style="background:linear-gradient(180deg,#4a90c8,#15487a);border-radius:10px;box-shadow:0 4px 18px rgba(255,180,220,0.4)"></canvas>
+        <canvas id="lulu-final" width="160" height="120" style="background:linear-gradient(180deg,#1a2a3a,#08121c);border-radius:10px;box-shadow:0 4px 18px rgba(255,180,220,0.4)"></canvas>
       </div>
       <p class="msg-sub" style="font-size:13px;color:#ffb0d0;margin-top:0">
-        La perrita maltesa más valiente de Nordeltopolis<br>
+        La salchicha más dulce del pantano nocturno<br>
         está a salvo gracias a <strong style="color:#ffd34d">${heroName}</strong>
       </p>
       <div class="msg-stats">
@@ -3669,9 +4354,9 @@ function showFinalVictory(){
     </div>
   `;
   msg.classList.remove('hidden');
-  // Render Lulu rescatada en su canvas
+  // Render salchicha hembra rescatada en su canvas
   setTimeout(()=>{
-    drawLuluFinal();
+    drawFrankieFinal();
   }, 50);
   document.getElementById('msg-btn').onclick = () => {
     msg.classList.add('hidden');
@@ -3679,114 +4364,181 @@ function showFinalVictory(){
   };
 }
 
-// Renderiza a Lulu en el canvas de la pantalla final, con corazoncitos
-function drawLuluFinal(){
+// Renderiza a Frankie (salchicha hembra) en la pantalla final, con corazoncitos
+function drawFrankieFinal(){
   const c = document.getElementById('lulu-final');
   if(!c) return;
   const lctx = c.getContext('2d');
   const W = c.width, H = c.height;
   lctx.clearRect(0, 0, W, H);
-  // Fondo: agua nordeltense con brillos
+  // Fondo: pantano nocturno - luna y luciérnagas
+  // Luna
+  lctx.fillStyle = 'rgba(255,250,210,0.9)';
+  lctx.beginPath();
+  lctx.arc(W*0.82, H*0.22, 14, 0, Math.PI*2);
+  lctx.fill();
+  lctx.fillStyle = 'rgba(255,250,210,0.25)';
+  lctx.beginPath();
+  lctx.arc(W*0.82, H*0.22, 22, 0, Math.PI*2);
+  lctx.fill();
   // Estrellas chiquitas
-  lctx.fillStyle = 'rgba(255,255,255,0.6)';
-  for(let i=0;i<14;i++){
+  lctx.fillStyle = 'rgba(255,255,255,0.7)';
+  for(let i=0;i<18;i++){
     const sx = (i*23 + 11) % W;
     const sy = (i*17 + 9) % (H*0.5);
     lctx.fillRect(sx, sy, 1, 1);
   }
-  // Lulu en el centro, escalada
-  const cx = W/2, cy = H*0.55;
-  const SC = 2.4;
+  // Luciérnagas verdes
+  lctx.fillStyle = 'rgba(160,255,140,0.85)';
+  const fires = [[W*0.18, H*0.4],[W*0.3, H*0.65],[W*0.7, H*0.55],[W*0.55, H*0.78]];
+  for(const [fx,fy] of fires){
+    lctx.beginPath(); lctx.arc(fx, fy, 1.5, 0, Math.PI*2); lctx.fill();
+    lctx.fillStyle = 'rgba(160,255,140,0.25)';
+    lctx.beginPath(); lctx.arc(fx, fy, 4, 0, Math.PI*2); lctx.fill();
+    lctx.fillStyle = 'rgba(160,255,140,0.85)';
+  }
+
+  // Frankie en el centro, escalada (salchicha hembra rosa-marrón con moño)
+  const cx = W/2, cy = H*0.6;
+  const SC = 1.7;
   lctx.save();
   lctx.translate(cx, cy);
   lctx.scale(SC, SC);
+
   // Sombra
-  lctx.fillStyle = 'rgba(0,0,0,0.25)';
+  lctx.fillStyle = 'rgba(0,0,0,0.3)';
   lctx.beginPath();
-  lctx.ellipse(0, 13, 12, 2, 0, 0, Math.PI*2);
+  lctx.ellipse(0, 14, 22, 2.5, 0, 0, Math.PI*2);
   lctx.fill();
-  // Cuerpo
-  lctx.fillStyle = '#fff';
+
+  // Cuerpo (largo de salchicha) - rosa caramelo/marrón claro
+  lctx.fillStyle = '#d4805a';
   lctx.beginPath();
-  lctx.ellipse(0, 4, 12, 8, 0, 0, Math.PI*2);
+  lctx.roundRect(-22, 2, 44, 12, 5);
   lctx.fill();
-  // Pechera
+  // Panza más clara
+  lctx.fillStyle = '#f0b890';
   lctx.beginPath();
-  lctx.arc(-4, 6, 4.5, 0, Math.PI*2);
-  lctx.arc(4, 6.5, 4.5, 0, Math.PI*2);
+  lctx.roundRect(-22, 4, 44, 5, 3);
   lctx.fill();
-  // Cabeza
+
+  // Patitas
+  lctx.fillStyle = '#a86038';
+  lctx.fillRect(-16, 14, 4, 6);
+  lctx.fillRect(12, 14, 4, 6);
+  // Detalles pinta de uñas
+  lctx.fillStyle = '#ff80a0';
+  lctx.fillRect(-15.5, 19, 3, 1);
+  lctx.fillRect(12.5, 19, 3, 1);
+
+  // Cabeza (a la derecha como en el sprite del jugador, pero la giramos al frente)
+  lctx.fillStyle = '#d4805a';
   lctx.beginPath();
-  lctx.arc(0, -7, 9, 0, Math.PI*2);
-  lctx.fill();
-  lctx.beginPath();
-  lctx.arc(-7, -4, 4, 0, Math.PI*2);
-  lctx.arc(7, -4, 4, 0, Math.PI*2);
-  lctx.fill();
-  // Orejas largas caídas
-  lctx.fillStyle = '#f8f8f8';
-  lctx.beginPath();
-  lctx.ellipse(-9, -3, 3.5, 7, -0.3, 0, Math.PI*2);
-  lctx.fill();
-  lctx.beginPath();
-  lctx.ellipse(9, -3, 3.5, 7, 0.3, 0, Math.PI*2);
+  lctx.roundRect(12, -8, 16, 13, 5);
   lctx.fill();
   // Hocico
-  lctx.fillStyle = '#f0e0d0';
+  lctx.fillStyle = '#a86038';
   lctx.beginPath();
-  lctx.arc(0, -5, 3, 0, Math.PI*2);
+  lctx.roundRect(24, -2, 8, 6, 2);
   lctx.fill();
   // Nariz
   lctx.fillStyle = '#1a1a1a';
   lctx.beginPath();
-  lctx.arc(0, -7, 1.3, 0, Math.PI*2);
+  lctx.arc(31, 0, 1.6, 0, Math.PI*2);
   lctx.fill();
-  // Ojos
+  // Brillito en la nariz
+  lctx.fillStyle = '#fff';
+  lctx.beginPath();
+  lctx.arc(30.6, -0.4, 0.5, 0, Math.PI*2);
+  lctx.fill();
+
+  // Ojos con pestañas largas (toque femenino)
+  lctx.fillStyle = '#fff';
+  lctx.beginPath();
+  lctx.arc(20, -3, 2.5, 0, Math.PI*2);
+  lctx.fill();
   lctx.fillStyle = '#1a1a1a';
   lctx.beginPath();
-  lctx.arc(-2.5, -8.5, 1.5, 0, Math.PI*2);
-  lctx.arc(2.5, -8.5, 1.5, 0, Math.PI*2);
+  lctx.arc(20.5, -3, 1.5, 0, Math.PI*2);
   lctx.fill();
   lctx.fillStyle = '#fff';
   lctx.beginPath();
-  lctx.arc(-2.2, -9, 0.6, 0, Math.PI*2);
-  lctx.arc(2.8, -9, 0.6, 0, Math.PI*2);
+  lctx.arc(20.2, -3.4, 0.6, 0, Math.PI*2);
   lctx.fill();
-  // Boquita feliz (sonrisa)
+  // Pestañas
   lctx.strokeStyle = '#1a1a1a';
-  lctx.lineWidth = 0.6;
+  lctx.lineWidth = 0.8;
   lctx.beginPath();
-  lctx.arc(0, -5, 1.5, 0.3, Math.PI - 0.3);
+  lctx.moveTo(17.5, -5.5); lctx.lineTo(16.5, -7);
+  lctx.moveTo(19, -6); lctx.lineTo(18.5, -8);
+  lctx.moveTo(21, -6); lctx.lineTo(21, -8);
   lctx.stroke();
-  // Corona
-  lctx.fillStyle = '#ffd34d';
-  lctx.fillRect(-7, -16, 14, 2);
+  // Cachetes rosaditos
+  lctx.fillStyle = 'rgba(255,150,170,0.6)';
   lctx.beginPath();
-  lctx.moveTo(-7,-16); lctx.lineTo(-5,-20); lctx.lineTo(-3,-16); lctx.fill();
-  lctx.beginPath();
-  lctx.moveTo(-1,-16); lctx.lineTo(0,-21); lctx.lineTo(1,-16); lctx.fill();
-  lctx.beginPath();
-  lctx.moveTo(3,-16); lctx.lineTo(5,-20); lctx.lineTo(7,-16); lctx.fill();
-  lctx.fillStyle = '#ff80a0';
-  lctx.beginPath(); lctx.arc(-5,-19,0.8,0,Math.PI*2); lctx.fill();
-  lctx.fillStyle = '#80d0ff';
-  lctx.beginPath(); lctx.arc(0,-20,0.8,0,Math.PI*2); lctx.fill();
-  lctx.fillStyle = '#ff80a0';
-  lctx.beginPath(); lctx.arc(5,-19,0.8,0,Math.PI*2); lctx.fill();
-  // Moño
-  lctx.fillStyle = '#ff80a0';
-  lctx.beginPath();
-  lctx.arc(-2.5, -14, 1.5, 0, Math.PI*2);
-  lctx.arc(2.5, -14, 1.5, 0, Math.PI*2);
+  lctx.arc(18, 1, 2.5, 0, Math.PI*2);
   lctx.fill();
+
+  // Oreja caída larga
+  lctx.fillStyle = '#a86038';
+  lctx.beginPath();
+  lctx.ellipse(15, -3, 4, 8, -0.3, 0, Math.PI*2);
+  lctx.fill();
+
+  // Cola levantada feliz
+  lctx.fillStyle = '#d4805a';
+  lctx.save();
+  lctx.translate(-22, 4);
+  lctx.rotate(-0.6);
+  lctx.fillRect(-2, -8, 4, 10);
   lctx.restore();
-  // Corazoncitos flotando alrededor
+
+  // ✨ MOÑO ROSA grande en la cabeza ✨
+  lctx.fillStyle = '#ff5599';
+  lctx.beginPath();
+  lctx.ellipse(15, -10, 4, 3, -0.3, 0, Math.PI*2);
+  lctx.ellipse(21, -10, 4, 3, 0.3, 0, Math.PI*2);
+  lctx.fill();
+  // Centro del moño
+  lctx.fillStyle = '#cc3377';
+  lctx.beginPath();
+  lctx.arc(18, -10, 1.5, 0, Math.PI*2);
+  lctx.fill();
+  // Brillo del moño
+  lctx.fillStyle = '#ffaacc';
+  lctx.beginPath();
+  lctx.ellipse(14, -10.5, 1.5, 0.8, -0.3, 0, Math.PI*2);
+  lctx.fill();
+
+  // Collar con corazón
+  lctx.strokeStyle = '#ff5599';
+  lctx.lineWidth = 1.5;
+  lctx.beginPath();
+  lctx.arc(18, 5, 6, 0.5, Math.PI - 0.5);
+  lctx.stroke();
+  // Medallón corazón
+  lctx.fillStyle = '#ff5599';
+  lctx.beginPath();
+  lctx.arc(17, 9, 1.2, 0, Math.PI*2);
+  lctx.arc(19, 9, 1.2, 0, Math.PI*2);
+  lctx.fill();
+  lctx.beginPath();
+  lctx.moveTo(15.8, 9.5);
+  lctx.lineTo(18, 12.5);
+  lctx.lineTo(20.2, 9.5);
+  lctx.fill();
+
+  lctx.restore();
+
+  // Corazoncitos flotando alrededor (más cantidad, romántico)
   lctx.fillStyle = '#ff80a0';
   const hearts = [
-    [W*0.18, H*0.28, 6],
-    [W*0.82, H*0.32, 5],
-    [W*0.12, H*0.7, 4],
-    [W*0.88, H*0.72, 6]
+    [W*0.15, H*0.25, 7],
+    [W*0.85, H*0.32, 6],
+    [W*0.1, H*0.5, 5],
+    [W*0.9, H*0.55, 6],
+    [W*0.2, H*0.75, 5],
+    [W*0.8, H*0.78, 6]
   ];
   for(const [hx,hy,sz] of hearts){
     lctx.save();
