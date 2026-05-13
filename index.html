@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0a0612">
 <meta name="description" content="Super Dachshund Bros — un juego de plataformas con perros salchicha, gatos y carpinchos.">
-<title>Super Dachshund Bros · 5 Mundos</title>
+<title>Super Dachshund Bros · 3×5 Mundos</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 html,body{
@@ -283,7 +283,7 @@ button.action-btn.secondary{
     <div><span>Bloque ?</span> Golpear desde abajo</div>
     <div><span>P</span> Pausa</div>
   </div>
-  <p class="hint">5 MUNDOS — Pradera · Caverna · Wonder Wiener · Nordeltopolis · Pantano Nocturno</p>
+  <p class="hint">3 MUNDOS × 5 NIVELES — Pradera · Caverna · Wonder Wiener · Nordeltopolis · Pantano. Mundo 2 TÉTRICO, Mundo 3 FRENÉTICO.</p>
   <button class="action-btn" id="btn-start">▶ JUGAR AHORA</button>
 </div>
 
@@ -398,6 +398,8 @@ let subLevelReturnX = 0;      // X del nivel principal donde regresar
 let subLevelReturnY = 0;
 let subLevelUsed = false;     // una sola vez por partida
 let savedMainState = null;    // snapshot del nivel principal al entrar al subnivel
+let worldNum = 1;             // 1, 2 o 3 — selecciona modificadores globales
+let enemySpeedMul = 1.0;      // multiplicador aplicado al baseSpd de todos los enemigos al construir el nivel
 
 // Tiles que el jugador y enemigos consideran sólidos
 const SOLID = new Set(['gnd','brk','qb','qbLife','ptop','pbod','ftop','fbod','sld','stone','dngnd','fall','ice','grassIsle','bridge']);
@@ -492,79 +494,194 @@ function playNoise(when, dur, opts){
 // Acordes y arpegios diseñados a la Moroder: pulso constante + arpegio rápido.
 
 const TRACKS = {
-  // ───── NIVEL 1 — PRADERA (optimista, mayor, tempo 124) ─────
-  // Acordes: Am - F - C - G (vi-IV-I-V, pop progression alegre)
-  level1: {
-    bpm: 124,
-    bars: 4,
+  // ═══════════════════════════════════════════════════════
+  //  MUNDO 1 — tonal estándar, alegre/épico
+  // ═══════════════════════════════════════════════════════
+
+  // ───── 1-1 PRADERA (optimista, mayor, 124) ─────
+  // Acordes: Am - F - C - G (vi-IV-I-V)
+  w1l1: {
+    bpm: 124, bars: 4,
     pattern: [
-      // bar 1: Am — arpegio A C E A
       {chord:['A3','C4','E4','A4'], bass:'A2', pad:'A3'},
-      // bar 2: F  — arpegio F A C F
       {chord:['F3','A3','C4','F4'], bass:'F2', pad:'F3'},
-      // bar 3: C  — arpegio C E G C
       {chord:['C3','E3','G3','C4'], bass:'C2', pad:'C3'},
-      // bar 4: G  — arpegio G B D G
       {chord:['G3','B3','D4','G4'], bass:'G2', pad:'G3'},
     ],
-    drums: 'simple',
-    arpType: 'square'
+    drums: 'simple', arpType: 'square'
   },
-  // ───── NIVEL 2 — CAVERNA (dramático, menor, tempo 108) ─────
-  // Acordes: Dm - Bb - F - A (i-VI-III-V, oscuro y misterioso)
-  level2: {
-    bpm: 108,
-    bars: 4,
+  // ───── 1-2 CAVERNA (dramático, menor, 108) ─────
+  w1l2: {
+    bpm: 108, bars: 4,
     pattern: [
       {chord:['D3','F3','A3','D4'], bass:'D2', pad:'D3'},
       {chord:['Bb2','D3','F3','Bb3'], bass:'Bb1', pad:'Bb2'},
       {chord:['F3','A3','C4','F4'], bass:'F2', pad:'F3'},
-      {chord:['A3','C#4','E4','A4'], bass:'A2', pad:'A3'},  // V dominante para tensión
+      {chord:['A3','C#4','E4','A4'], bass:'A2', pad:'A3'},
     ],
-    drums: 'sparse',
-    arpType: 'triangle'
+    drums: 'sparse', arpType: 'triangle'
   },
-  // ───── NIVEL 3 — WONDER WIENER (heroico, rápido, 138 bpm) ─────
-  // Acordes: Em - C - G - D (vi-IV-I-V, épico)
-  level3: {
-    bpm: 138,
-    bars: 4,
+  // ───── 1-3 WONDER WIENER (heroico, rápido, 138) ─────
+  w1l3: {
+    bpm: 138, bars: 4,
     pattern: [
       {chord:['E3','G3','B3','E4'], bass:'E2', pad:'E3'},
       {chord:['C3','E3','G3','C4'], bass:'C2', pad:'C3'},
       {chord:['G3','B3','D4','G4'], bass:'G2', pad:'G3'},
       {chord:['D3','F#3','A3','D4'], bass:'D2', pad:'D3'},
     ],
-    drums: 'rock',
-    arpType: 'square'
+    drums: 'rock', arpType: 'square'
   },
-  // ───── NIVEL 4 — NORDELTOPOLIS (épico/glamoroso, 120) ─────
-  // Acordes: Fmaj7 - Em7 - Dm7 - G7 (jazz-pop sofisticado, From Here to Eternity)
-  level4: {
-    bpm: 120,
-    bars: 4,
+  // ───── 1-4 NORDELTOPOLIS (épico/glamoroso, 120) ─────
+  w1l4: {
+    bpm: 120, bars: 4,
     pattern: [
       {chord:['F3','A3','C4','E4'], bass:'F2', pad:'F3'},
       {chord:['E3','G3','B3','D4'], bass:'E2', pad:'E3'},
       {chord:['D3','F3','A3','C4'], bass:'D2', pad:'D3'},
       {chord:['G3','B3','D4','F4'], bass:'G2', pad:'G3'},
     ],
-    drums: 'disco',
-    arpType: 'square'
+    drums: 'disco', arpType: 'square'
   },
-  // ───── NIVEL 5 — PANTANO NOCTURNO (oscuro, suspense, lento, 92) ─────
-  // Acordes: Gm - Eb - Bb - F (mi sostenido oscuro)
-  level5: {
-    bpm: 92,
-    bars: 4,
+  // ───── 1-5 PANTANO NOCTURNO (oscuro, suspense, 92) ─────
+  w1l5: {
+    bpm: 92, bars: 4,
     pattern: [
       {chord:['G3','Bb3','D4','G4'], bass:'G2', pad:'G3'},
       {chord:['Eb3','G3','Bb3','Eb4'], bass:'Eb2', pad:'Eb3'},
       {chord:['Bb2','D3','F3','Bb3'], bass:'Bb1', pad:'Bb2'},
       {chord:['F3','A3','C4','F4'], bass:'F2', pad:'F3'},
     ],
-    drums: 'sparse',
-    arpType: 'triangle'
+    drums: 'sparse', arpType: 'triangle'
+  },
+
+  // ═══════════════════════════════════════════════════════
+  //  MUNDO 2 — TÉTRICO: más oscuro, menores armónicas, disonancias
+  //  Usamos modos menores armónicos (con la 7ª aumentada) y movimientos cromáticos.
+  //  Tempo +5 BPM respecto al mundo 1 (más nervioso).
+  // ═══════════════════════════════════════════════════════
+
+  // ───── 2-1 PRADERA EMBRUJADA (Am armónica, 130) ─────
+  // i - iv - V - i en menor armónica → tensión gótica
+  w2l1: {
+    bpm: 130, bars: 4,
+    pattern: [
+      {chord:['A3','C4','E4','G#4'], bass:'A2', pad:'A3'},     // Am(maj7)
+      {chord:['D3','F3','A3','D4'],  bass:'D2', pad:'D3'},     // Dm
+      {chord:['E3','G#3','B3','E4'], bass:'E2', pad:'E3'},     // E mayor (V)
+      {chord:['A3','C4','E4','G#4'], bass:'A1', pad:'A3'},     // i con octava grave
+    ],
+    drums: 'rock', arpType: 'sawtooth'
+  },
+  // ───── 2-2 CAVERNA PROFUNDA (Dm cromática, 115) ─────
+  w2l2: {
+    bpm: 115, bars: 4,
+    pattern: [
+      {chord:['D3','F3','A3','C#4'], bass:'D2', pad:'D3'},     // Dm(maj7)
+      {chord:['Eb3','Gb3','Bb3','Db4'], bass:'Eb2', pad:'Eb3'}, // movimiento cromático
+      {chord:['Bb2','D3','F3','Ab3'], bass:'Bb1', pad:'Bb2'},  // Bb7
+      {chord:['A3','C#4','E4','G4'], bass:'A2', pad:'A3'},     // A7 (V dom)
+    ],
+    drums: 'sparse', arpType: 'sawtooth'
+  },
+  // ───── 2-3 WONDER OSCURO (Em armónica, 145) ─────
+  w2l3: {
+    bpm: 145, bars: 4,
+    pattern: [
+      {chord:['E3','G3','B3','D#4'], bass:'E2', pad:'E3'},
+      {chord:['A3','C4','E4','G4'],  bass:'A2', pad:'A3'},
+      {chord:['B3','D#4','F#4','A4'], bass:'B2', pad:'B3'},   // V7
+      {chord:['E3','G3','B3','D#4'], bass:'E1', pad:'E3'},
+    ],
+    drums: 'rock', arpType: 'sawtooth'
+  },
+  // ───── 2-4 NORDEL FANTASMAL (Fm jazz oscuro, 125) ─────
+  w2l4: {
+    bpm: 125, bars: 4,
+    pattern: [
+      {chord:['F3','Ab3','C4','Eb4'], bass:'F2', pad:'F3'},   // Fm7
+      {chord:['Eb3','Gb3','Bb3','Db4'], bass:'Eb2', pad:'Eb3'},
+      {chord:['Db3','F3','Ab3','C4'], bass:'Db2', pad:'Db3'},
+      {chord:['C3','E3','G3','Bb3'],  bass:'C2', pad:'C3'},    // C7 (V dom)
+    ],
+    drums: 'disco', arpType: 'sawtooth'
+  },
+  // ───── 2-5 PANTANO MALDITO (Gm armónica, 96) ─────
+  w2l5: {
+    bpm: 96, bars: 4,
+    pattern: [
+      {chord:['G3','Bb3','D4','F#4'], bass:'G2', pad:'G3'},
+      {chord:['Eb3','G3','Bb3','D4'], bass:'Eb2', pad:'Eb3'},
+      {chord:['D3','F#3','A3','C4'],  bass:'D2', pad:'D3'},    // D7
+      {chord:['G3','Bb3','D4','F#4'], bass:'G1', pad:'G3'},
+    ],
+    drums: 'sparse', arpType: 'sawtooth'
+  },
+
+  // ═══════════════════════════════════════════════════════
+  //  MUNDO 3 — FRENÉTICO: instrumental rico, contrapunto.
+  //  Usamos modos lidio y mixolidio (sonido épico/heroico de videojuegos).
+  //  Tempo +10 BPM respecto al mundo 2 (caos controlado).
+  //  arpType variado: cada track usa una mezcla.
+  // ═══════════════════════════════════════════════════════
+
+  // ───── 3-1 PRADERA SOBRECARGADA (C lidio, 140) ─────
+  // Acordes con #4 — sonido luminoso/épico tipo Final Fantasy
+  w3l1: {
+    bpm: 140, bars: 4,
+    pattern: [
+      {chord:['C4','E4','G4','B4'],  bass:'C2', pad:'C3'},    // Cmaj7
+      {chord:['D4','F#4','A4','C5'], bass:'D2', pad:'D3'},    // D mayor (lidio)
+      {chord:['G3','B3','D4','F4'],  bass:'G2', pad:'G3'},    // G7
+      {chord:['A3','C4','E4','G4'],  bass:'A2', pad:'A3'},
+    ],
+    drums: 'rock', arpType: 'square'
+  },
+  // ───── 3-2 CAVERNA MAJESTUOSA (D dorica, 122) ─────
+  w3l2: {
+    bpm: 122, bars: 4,
+    pattern: [
+      {chord:['D3','F3','A3','C4'],  bass:'D2', pad:'D3'},    // Dm7
+      {chord:['G3','B3','D4','F4'],  bass:'G2', pad:'G3'},    // G7 (dorian IV)
+      {chord:['C3','E3','G3','B3'],  bass:'C2', pad:'C3'},
+      {chord:['F3','A3','C4','E4'],  bass:'F2', pad:'F3'},
+    ],
+    drums: 'rock', arpType: 'triangle'
+  },
+  // ───── 3-3 WONDER FRENÉTICO (E mixolidio, 155) ─────
+  // bpm rapidísimo, casi caos
+  w3l3: {
+    bpm: 155, bars: 4,
+    pattern: [
+      {chord:['E3','G#3','B3','D4'], bass:'E2', pad:'E3'},   // E7
+      {chord:['A3','C#4','E4','G4'], bass:'A2', pad:'A3'},   // A7
+      {chord:['D3','F#3','A3','C4'], bass:'D2', pad:'D3'},   // D7
+      {chord:['B3','D#4','F#4','A4'], bass:'B2', pad:'B3'},  // B7
+    ],
+    drums: 'rock', arpType: 'square'
+  },
+  // ───── 3-4 NORDEL ÉPICO (F lidio jazz, 132) ─────
+  w3l4: {
+    bpm: 132, bars: 4,
+    pattern: [
+      {chord:['F3','A3','C4','E4'],   bass:'F2', pad:'F3'},
+      {chord:['G3','B3','D4','F4'],   bass:'G2', pad:'G3'},
+      {chord:['A3','C4','E4','G4'],   bass:'A2', pad:'A3'},
+      {chord:['Bb3','D4','F4','A4'],  bass:'Bb2', pad:'Bb3'},
+    ],
+    drums: 'disco', arpType: 'square'
+  },
+  // ───── 3-5 PANTANO FINAL (Cm épico, 110) ─────
+  // Final dramático — preparación para la victoria
+  w3l5: {
+    bpm: 110, bars: 4,
+    pattern: [
+      {chord:['C3','Eb3','G3','Bb3'], bass:'C2', pad:'C3'},
+      {chord:['Ab2','C3','Eb3','G3'], bass:'Ab1', pad:'Ab2'},
+      {chord:['F3','Ab3','C4','Eb4'], bass:'F2', pad:'F3'},
+      {chord:['G3','B3','D4','F4'],   bass:'G2', pad:'G3'},   // G7 (V dom)
+    ],
+    drums: 'rock', arpType: 'triangle'
   }
 };
 
@@ -596,6 +713,34 @@ function scheduleBar(track, barIdx, startTime){
   for(const n of bar.chord){
     playNote(startTime, nm(n) + 0, beat*4 * 0.98,
              {type: 'triangle', vol: 0.08, attack: 0.1, release: 0.2});
+  }
+
+  // ── MUNDO 3: Contramelodía instrumental (líneas independientes con triangle) ──
+  if(worldNum === 3){
+    // Melodía rítmica: corcheas con notas del acorde en alturas variables
+    // Patrón melódico (índices de la nota en el acorde, octava +0 ó +12)
+    const melodyPattern = [
+      {idx:3, oct:0}, {idx:2, oct:0}, {idx:3, oct:12}, {idx:2, oct:0},
+      {idx:1, oct:0}, {idx:2, oct:0}, {idx:3, oct:0}, {idx:1, oct:12}
+    ];
+    melodyPattern.forEach((m, i)=>{
+      const noteName = bar.chord[m.idx % bar.chord.length];
+      playNote(startTime + i*eighth, nm(noteName) + m.oct, eighth*0.85,
+               {type: 'triangle', vol: 0.22, attack: 0.01, release: 0.04});
+    });
+    // Sub-bajo extra (más profundidad)
+    playNote(startTime, nm(bar.bass) - 12, beat*4 * 0.98,
+             {type: 'triangle', vol: 0.10, attack: 0.05, release: 0.15});
+  }
+
+  // ── MUNDO 2: Drone/zumbido oscuro adicional ──
+  if(worldNum === 2){
+    // Drone sostenido en la tónica grave, tipo órgano fantasmal
+    playNote(startTime, nm(bar.bass) - 12, beat*4 * 0.98,
+             {type: 'sawtooth', vol: 0.06, attack: 0.3, release: 0.4});
+    // Notas alternas crípticas (cromáticas)
+    playNote(startTime + beat*2, nm(bar.bass) + 13, beat*0.4,
+             {type: 'sawtooth', vol: 0.08, attack: 0.02, release: 0.08});
   }
   // ── DRUMS ──
   if(track.drums === 'simple'){
@@ -848,6 +993,8 @@ function startGame(){
   lives = 3; bones = 0; shots = 0; playerBullets = [];
   totalBonesEarned = 0; bonesSinceLastLife = 0;
   paused = false;
+  worldNum = 1;
+  enemySpeedMul = 1.0;
   subLevelUsed = false;
   inSubLevel = false;
   savedMainState = null;
@@ -886,30 +1033,37 @@ function initLevel(lvl){
   platforms = [];
   projectiles = [];
 
+  // Configurar multiplicador de velocidad de enemigos según el mundo
+  if(worldNum === 2) enemySpeedMul = 2.0;
+  else if(worldNum === 3) enemySpeedMul = 2.5;
+  else enemySpeedMul = 1.0;
+
   if(lvl===1) buildLevel1();
   else if(lvl===2) buildLevel2();
   else if(lvl===3) buildLevel3();
   else if(lvl===4) buildLevel4();
   else if(lvl===5) buildLevel5();
   hud();
-  // Arrancar track del nivel
-  startMusic('level' + lvl);
+  // Arrancar track del nivel (key depende del mundo)
+  startMusic('w' + worldNum + 'l' + lvl);
 }
 
 function hud(){
   document.getElementById('h-lives').textContent = lives;
   document.getElementById('h-bones').textContent = bones;
   const lvlEl = document.getElementById('h-level');
-  lvlEl.textContent = level;
+  lvlEl.textContent = worldNum + '-' + level;
+  // Clase de color: usa lvl* pero más oscuro en mundos 2/3
   lvlEl.className = level===2?'val lvl2':level===3?'val lvl3':level===4?'val lvl4':level===5?'val lvl5':'val';
-  const titles = [
-    '★ MUNDO 1 · PRADERA',
-    '★ MUNDO 2 · CAVERNA',
-    '★ MUNDO 3 · WONDER WIENER',
-    '★ MUNDO 4 · NORDELTOPOLIS',
-    '★ MUNDO 5 · PANTANO NOCTURNO'
+  const baseTitles = [
+    'PRADERA',
+    'CAVERNA',
+    'WONDER WIENER',
+    'NORDELTOPOLIS',
+    'PANTANO NOCTURNO'
   ];
-  document.getElementById('h-title').textContent = titles[level-1] || '★ SUPER DACHSHUND';
+  const worldPrefix = worldNum === 1 ? '' : (worldNum === 2 ? 'TÉTRICO · ' : 'FRENÉTICO · ');
+  document.getElementById('h-title').textContent = '★ MUNDO ' + worldNum + '-' + level + ' · ' + worldPrefix + (baseTitles[level-1] || '');
   const ammoEl = document.getElementById('h-ammo');
   ammoEl.style.display = shots>0 ? 'inline-flex' : 'none';
   document.getElementById('h-shots').textContent = shots;
@@ -964,6 +1118,120 @@ function removeBlockedItems(){
     return true;
   });
 }
+
+// Aplica modificadores globales del mundo actual a los enemigos ya spawneados.
+// Multiplica baseSpd y vx por enemySpeedMul. Mundos 2 y 3 también añaden:
+//  - ratitas frenéticas (20 por nivel)
+//  - gorriones erráticos (solo mundo 3)
+//  - pasarelas extras (variación de layout)
+function applyWorldModifiers(){
+  // 1) Multiplicar velocidades de TODOS los enemigos
+  for(const e of enemies){
+    if(e.baseSpd != null) e.baseSpd *= enemySpeedMul;
+    if(e.vx != null) e.vx *= enemySpeedMul;
+    if(e.flySpeedY != null) e.flySpeedY *= Math.min(enemySpeedMul, 1.6);  // limitar oscilación vertical
+  }
+  // 2) Mundo 2 y 3: ratitas frenéticas (20 por nivel principal, no subnivel)
+  if(worldNum >= 2 && !inSubLevel){
+    spawnFrenzyRats(20);
+  }
+  // 3) Mundo 3: gorriones erráticos
+  if(worldNum >= 3 && !inSubLevel){
+    spawnSparrows(8);
+  }
+  // 4) Mundos 2 y 3: pasarelas extras (suspended bridges para variación)
+  if(worldNum >= 2 && !inSubLevel){
+    addExtraBridges();
+  }
+}
+
+// Spawnea N ratitas frenéticas dispersas. Saltan, corren rápido, patrol enorme.
+function spawnFrenzyRats(n){
+  // Encontrar rango horizontal del nivel
+  let maxX = 0;
+  for(const t of tiles) if(t.x > maxX) maxX = t.x;
+  const rangeEnd = Math.min(maxX, (window._flagX || maxX) - 4*TILE);
+  for(let i=0; i<n; i++){
+    const ex = 10 + ((i*7 + 3) % Math.floor(rangeEnd / TILE - 12));
+    const dir = (i % 2 === 0) ? 1 : -1;
+    // Velocidad escalada: mundo 2 = 1.5×base, mundo 3 = 2.0×base
+    const baseSpeed = 1.0 * enemySpeedMul;
+    enemies.push({
+      x: ex * TILE, y: 10 * TILE,
+      w: 14, h: 10,
+      vx: baseSpeed * dir, vy: 0, dir: dir,
+      alive: true, dead: false, deadT: 0, fr: 0, ft: 0,
+      type: 'jump', kind: 'rat',
+      baseSpd: baseSpeed,
+      jumpT: 30 + (Math.random()*40|0),
+      onGround: false,
+      breathT: Math.random()*Math.PI*2,
+      homeX: ex * TILE, patrolRange: 999*TILE,  // patrullan todo el mapa
+      tailT: Math.random()*Math.PI*2,
+      frenzy: true
+    });
+  }
+}
+
+// Spawnea gorriones erráticos (vuelan en zigzag impredecible)
+function spawnSparrows(n){
+  let maxX = 0;
+  for(const t of tiles) if(t.x > maxX) maxX = t.x;
+  const rangeEnd = Math.min(maxX, (window._flagX || maxX) - 4*TILE);
+  for(let i=0; i<n; i++){
+    const ex = 20 + ((i*13 + 7) % Math.floor(rangeEnd / TILE - 15));
+    const ey = 2 + (i % 5);
+    const dir = (i % 2 === 0) ? 1 : -1;
+    const baseSpeed = 1.3 * enemySpeedMul;
+    enemies.push({
+      x: ex * TILE, y: ey * TILE,
+      w: 12, h: 10,
+      vx: baseSpeed * dir, vy: 0, dir: dir,
+      alive: true, dead: false, deadT: 0, fr: 0, ft: 0,
+      type: 'fly', kind: 'sparrow',
+      baseSpd: baseSpeed,
+      jumpT: 0,
+      onGround: false,
+      breathT: Math.random()*Math.PI*2,
+      flyBaseY: ey * TILE,
+      flyAmpY: 2.5 * TILE,
+      flyPhase: Math.random()*Math.PI*2,
+      flySpeedY: 0.06 + Math.random()*0.04,  // más rápido y errático
+      homeX: ex * TILE, patrolRange: 16*TILE,
+      erratic: true,
+      erraticTimer: 0,
+      erraticDir: dir
+    });
+  }
+}
+
+// Agrega pasarelas extras (puentes suspendidos) en posiciones genéricas
+// para variar el layout en mundos 2 y 3 sin romper el nivel.
+function addExtraBridges(){
+  // Encontrar pares de plataformas separadas y meter una pasarela en el aire entre ellas.
+  // Estrategia simple: poner pasarelas en posiciones predefinidas que sabemos que están vacías.
+  // Posiciones en tiles globales (filas altas, donde no haya nada).
+  const candidates = [
+    [50, 4], [85, 3], [120, 4], [155, 3], [185, 4],
+    [60, 5], [100, 6], [140, 5], [175, 6]
+  ];
+  candidates.forEach(([tx, ty])=>{
+    // Sólo poner si no hay tile sólido en esa zona (3 de ancho)
+    let collides = false;
+    for(let dx=0; dx<3; dx++){
+      for(const t of tiles){
+        if(t.x === (tx+dx)*TILE && t.y === ty*TILE && SOLID.has(t.t)){
+          collides = true; break;
+        }
+      }
+      if(collides) break;
+    }
+    if(!collides){
+      for(let dx=0; dx<3; dx++) T(tx+dx, ty, 'bridge');
+    }
+  });
+}
+
 function pipe(tx, h){
   for(let r=0;r<h;r++){
     T(tx, 11-r, r===0?'ptop':'pbod');
@@ -1125,6 +1393,7 @@ function buildLevel1(){
   [24, 32, 49, 67, 75, 90, 107, 137, 147, 168, 180, 191].forEach(ex => {
     addEnemy(ex, 11, {spd:0.95, patrol: 5*TILE});
   });
+  applyWorldModifiers();
   removeBlockedItems();
 }
 
@@ -1361,6 +1630,7 @@ function buildLevel2(){
     angry:false, jumpT:90, phase:1, onGround:false,
     color:'orange'
   };
+  applyWorldModifiers();
   removeBlockedItems();
 }
 
@@ -1565,6 +1835,7 @@ function buildLevel3(){
       homeX: ex*TILE, patrolRange: 12*TILE
     });
   });
+  applyWorldModifiers();
   removeBlockedItems();
 }
 
@@ -1738,6 +2009,7 @@ function buildLevel4(){
       waterY: water.surfaceY - 12
     });
   });
+  applyWorldModifiers();
   removeBlockedItems();
 }
 
@@ -1954,6 +2226,7 @@ function buildLevel5(){
       homeX: ex*TILE, patrolRange: 14*TILE
     });
   });
+  applyWorldModifiers();
   removeBlockedItems();
 }
 
@@ -2280,21 +2553,38 @@ function updateEnemies(){
       e.flyPhase += e.flySpeedY;
       // Oscilación vertical sinusoidal
       e.y = e.flyBaseY + Math.sin(e.flyPhase) * e.flyAmpY;
+      // Movimiento errático para gorriones: cambios bruscos de dirección Y y velocidad
+      if(e.erratic){
+        e.erraticTimer = (e.erraticTimer || 0) + 1;
+        // Cada 30-60 frames, sacudida vertical y posible cambio horizontal
+        if(e.erraticTimer > 30 + (Math.random()*30|0)){
+          e.erraticTimer = 0;
+          // Cambio brusco de altura base
+          e.flyBaseY = Math.max(TILE, Math.min(7*TILE, e.flyBaseY + (Math.random()-0.5) * 4 * TILE));
+          // 30% prob de cambiar dirección horizontal de golpe
+          if(Math.random() < 0.3) e.dir = -e.dir;
+        }
+        // Si jugador está cerca, perseguirlo horizontalmente con probabilidad
+        if(Math.abs(P.x - e.x) < 8*TILE && Math.random() < 0.03){
+          e.dir = (P.x > e.x) ? 1 : -1;
+        }
+      }
       // Movimiento horizontal con patrullaje
       const offset = e.x - e.homeX;
       if(offset > e.patrolRange && e.dir > 0){
         e.dir = -1;
+        if(e.erratic) e.homeX = e.x;  // resetear casa para que siga errático
       } else if(offset < -e.patrolRange && e.dir < 0){
         e.dir = 1;
+        if(e.erratic) e.homeX = e.x;
       }
       e.x += e.dir * e.baseSpd;
-      // Aletear más rápido para animar
       // Colisión con jugador
       if(!P.dead && P.inv === 0 && active){
         const hb = {x:e.x+2, y:e.y+2, w:e.w-4, h:e.h-4};
         if(aabb(P, hb)){
           if(P.vy > 0.4 && P.y + P.h < e.y + e.h*0.6){
-            // Aplastar al murciélago/gaviota
+            // Aplastar al murciélago/gaviota/gorrión
             e.dead = true; e.deadT = 0;
             e.vy = -3;
             e.vx = 0;
@@ -2877,22 +3167,39 @@ function checkFlag(){
   if(P.dead || won || levelTransitioning) return;
   if(P.x + P.w > window._flagX && P.x < window._flagX + 8){
     won = true; levelTransitioning = true;
-    if(level === 1){
-      showMsg('¡NIVEL 1 COMPLETO!',
-        '¡A la mazmorra! Nivel 2: Caverna del Gato Rey',
-        'CONTINUAR',
-        ()=>{ initLevel(2); });
-    } else if(level === 3){
-      showMsg('¡NIVEL 3 COMPLETO!',
-        '¡Wonder Wiener triunfa! Próximo: Nordeltopolis',
-        'CONTINUAR',
-        ()=>{ initLevel(4); });
-    } else if(level === 4){
-      showMsg('¡NIVEL 4 COMPLETO!',
-        '¡Lulu rescatada! Pero un nuevo peligro acecha de noche...',
-        'CONTINUAR',
-        ()=>{ initLevel(5); });
-    } else if(level === 5){
+    // Si no es el último nivel del mundo → pasar al siguiente nivel del mismo mundo
+    if(level < 5){
+      const nextLvl = level + 1;
+      const subtitle = {
+        2: '¡A la mazmorra! Caverna del Gato Rey',
+        3: '¡Wonder Wiener cabalga! Próximo: tierra tropical',
+        4: '¡Llegaste a Nordeltopolis!',
+        5: '¡Un peligro nocturno acecha...'
+      }[nextLvl] || '¡Continuá!';
+      showMsg('¡MUNDO ' + worldNum + '-' + level + ' COMPLETO!',
+        subtitle, 'CONTINUAR',
+        ()=>{ initLevel(nextLvl); });
+      return;
+    }
+    // level === 5: fin del mundo actual
+    if(worldNum < 3){
+      const nextWorld = worldNum + 1;
+      const wTitle = nextWorld === 2 ? 'MUNDO TÉTRICO' : 'MUNDO FRENÉTICO';
+      const wSub = nextWorld === 2
+        ? 'Los enemigos son el doble de rápidos. Las ratitas se desatan.'
+        : 'Velocidad x2.5 + ratitas frenéticas + gorriones erráticos.';
+      showMsg('¡MUNDO ' + worldNum + ' COMPLETO!',
+        '★ Entrando al MUNDO ' + nextWorld + ' · ' + wTitle + ' ★\n' + wSub,
+        'AVANZAR',
+        ()=>{
+          worldNum = nextWorld;
+          subLevelUsed = false;   // el subnivel está disponible en cada mundo
+          inSubLevel = false;
+          savedMainState = null;
+          initLevel(1);
+        });
+    } else {
+      // Mundo 3 - nivel 5 → victoria final
       setTimeout(()=>{
         showFinalVictory();
       }, 400);
@@ -4076,6 +4383,7 @@ function drawEnemy(e){
   if(e.kind === 'croc') drawCroc(e, x, y);
   else if(e.kind === 'bat') drawBat(e, x, y);
   else if(e.kind === 'seagull') drawSeagull(e, x, y);
+  else if(e.kind === 'sparrow') drawSparrow(e, x, y);
   else if(e.kind === 'rat') drawRat(e, x, y);
   else if(e.kind === 'capi') drawCapincho(e, x, y);
   else if(e.kind === 'squirrel') drawSquirrel(e, x, y);
@@ -4871,6 +5179,111 @@ function drawSeagull(e, x, y){
   ctx.fillStyle = '#ff9020';
   ctx.fillRect(x+e.w*0.55, y+e.h*0.85, 1.5, 2);
   ctx.fillRect(x+e.w*0.65, y+e.h*0.85, 1.5, 2);
+
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  RENDER — GORRIÓN (mundo 3, vuelo errático)
+// ═══════════════════════════════════════════════════════════════
+function drawSparrow(e, x, y){
+  if(e.dead){
+    ctx.fillStyle = '#8a6840';
+    ctx.fillRect(x+2, y+e.h*0.4, e.w-4, e.h*0.5);
+    return;
+  }
+
+  // Aleteo rápido (más rápido que la gaviota)
+  const wingUp = (fc % 8) < 4;
+
+  ctx.save();
+  if(e.dir < 0){
+    ctx.translate(x + e.w, 0);
+    ctx.scale(-1, 1);
+    x = 0;
+  } else {
+    ctx.translate(x, 0);
+    x = 0;
+  }
+
+  // Cuerpo marrón rechoncho
+  ctx.fillStyle = '#a06030';
+  ctx.beginPath();
+  ctx.ellipse(x+e.w/2, y+e.h*0.6, e.w*0.4, e.h*0.4, 0, 0, Math.PI*2);
+  ctx.fill();
+  // Manchas oscuras (gorrión moteado)
+  ctx.fillStyle = '#5a3010';
+  ctx.fillRect(x+e.w*0.35, y+e.h*0.45, 1.5, 1.5);
+  ctx.fillRect(x+e.w*0.55, y+e.h*0.55, 1.5, 1.5);
+  ctx.fillRect(x+e.w*0.45, y+e.h*0.7, 1.5, 1.5);
+
+  // Panza más clara
+  ctx.fillStyle = '#d8a878';
+  ctx.fillRect(x+e.w*0.35, y+e.h*0.7, e.w*0.3, 2);
+
+  // Alas rápidas (puntiagudas, más pequeñas que gaviota)
+  ctx.fillStyle = '#704018';
+  if(wingUp){
+    // Alas arriba
+    ctx.beginPath();
+    ctx.moveTo(x+e.w*0.4, y+e.h*0.5);
+    ctx.lineTo(x-1, y+e.h*0.1);
+    ctx.lineTo(x+e.w*0.3, y+e.h*0.55);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x+e.w*0.6, y+e.h*0.5);
+    ctx.lineTo(x+e.w+1, y+e.h*0.1);
+    ctx.lineTo(x+e.w*0.7, y+e.h*0.55);
+    ctx.fill();
+  } else {
+    // Alas abajo
+    ctx.beginPath();
+    ctx.moveTo(x+e.w*0.4, y+e.h*0.55);
+    ctx.lineTo(x, y+e.h);
+    ctx.lineTo(x+e.w*0.35, y+e.h*0.65);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(x+e.w*0.6, y+e.h*0.55);
+    ctx.lineTo(x+e.w, y+e.h);
+    ctx.lineTo(x+e.w*0.65, y+e.h*0.65);
+    ctx.fill();
+  }
+
+  // Cabeza redonda
+  ctx.fillStyle = '#7a4818';
+  ctx.beginPath();
+  ctx.arc(x+e.w*0.75, y+e.h*0.4, e.h*0.28, 0, Math.PI*2);
+  ctx.fill();
+  // "Capucha" más oscura típica del gorrión (parte superior de la cabeza)
+  ctx.fillStyle = '#3a1810';
+  ctx.beginPath();
+  ctx.arc(x+e.w*0.78, y+e.h*0.3, 1.5, 0, Math.PI*2);
+  ctx.fill();
+
+  // Pico cortito triangular
+  ctx.fillStyle = '#1a0a08';
+  ctx.beginPath();
+  ctx.moveTo(x+e.w*0.85, y+e.h*0.4);
+  ctx.lineTo(x+e.w, y+e.h*0.45);
+  ctx.lineTo(x+e.w*0.85, y+e.h*0.5);
+  ctx.fill();
+
+  // Ojito brillante
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.arc(x+e.w*0.78, y+e.h*0.38, 1, 0, Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(x+e.w*0.78-0.2, y+e.h*0.38-0.3, 0.4, 0.4);
+
+  // Cola en abanico corto
+  ctx.fillStyle = '#5a3010';
+  ctx.beginPath();
+  ctx.moveTo(x+e.w*0.2, y+e.h*0.55);
+  ctx.lineTo(x-2, y+e.h*0.5);
+  ctx.lineTo(x-2, y+e.h*0.75);
+  ctx.lineTo(x+e.w*0.2, y+e.h*0.7);
+  ctx.fill();
 
   ctx.restore();
 }
@@ -5753,6 +6166,32 @@ function render(){
 
   // dynamic parallax
   drawParallax();
+
+  // Overlay del mundo (mundos 2 y 3 tienen capa de color encima del fondo)
+  if(worldNum === 2 && !inSubLevel){
+    // Mundo TÉTRICO: tinte rojo-violeta oscuro con viñeta
+    ctx.fillStyle = 'rgba(60, 10, 40, 0.35)';
+    ctx.fillRect(0, 0, CW, CH);
+    // Viñeta oscura
+    const grd = ctx.createRadialGradient(CW/2, CH/2, CH*0.2, CW/2, CH/2, CH*0.85);
+    grd.addColorStop(0, 'rgba(0,0,0,0)');
+    grd.addColorStop(1, 'rgba(0,0,0,0.55)');
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, CW, CH);
+  } else if(worldNum === 3 && !inSubLevel){
+    // Mundo FRENÉTICO: tinte verde-azul fantasmal con flicker
+    const flick = 0.25 + Math.sin(fc*0.04)*0.05;
+    ctx.fillStyle = `rgba(40, 80, 100, ${flick})`;
+    ctx.fillRect(0, 0, CW, CH);
+    // Tinte cian sutil
+    ctx.fillStyle = 'rgba(0, 200, 220, 0.06)';
+    ctx.fillRect(0, 0, CW, CH);
+    // Líneas de scan horizontales (efecto retro)
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
+    for(let yy=0; yy<CH; yy+=3){
+      ctx.fillRect(0, yy, CW, 1);
+    }
+  }
 
   // tiles (only those visible)
   const camLeft = cam.x - TILE;
