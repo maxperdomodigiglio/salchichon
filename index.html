@@ -335,13 +335,17 @@ window.addEventListener('orientationchange', resizeCanvas);
 // ═══════════════════════════════════════════════════════════════
 //  INPUT — teclado + táctil
 // ═══════════════════════════════════════════════════════════════
-const K = {left:false, right:false, jump:false, shoot:false};
+const K = {left:false, right:false, jump:false, shoot:false, down:false};
 let jumpTap = false, shootTap = false, paused = false;
+let downTap = false;  // tap único de bajar para entrar/salir al subnivel
 
 document.addEventListener('keydown', e => {
   if(e.repeat) return;
   if(e.code==='ArrowLeft' || e.key==='a' || e.key==='A') K.left=true;
   if(e.code==='ArrowRight' || e.key==='d' || e.key==='D') K.right=true;
+  if(e.code==='ArrowDown' || e.key==='s' || e.key==='S'){
+    if(!K.down) downTap=true; K.down=true;
+  }
   if(e.code==='Space' || e.code==='KeyZ' || e.code==='ArrowUp'){
     if(!K.jump) jumpTap=true; K.jump=true;
   }
@@ -356,6 +360,7 @@ document.addEventListener('keydown', e => {
 document.addEventListener('keyup', e => {
   if(e.code==='ArrowLeft' || e.key==='a' || e.key==='A') K.left=false;
   if(e.code==='ArrowRight' || e.key==='d' || e.key==='D') K.right=false;
+  if(e.code==='ArrowDown' || e.key==='s' || e.key==='S') K.down=false;
   if(e.code==='Space' || e.code==='KeyZ' || e.code==='ArrowUp') K.jump=false;
   if(e.code==='KeyX') K.shoot=false;
 });
@@ -385,6 +390,11 @@ let totalBonesEarned = 0;     // contador histórico para el final
 let bonesSinceLastLife = 0;   // se acumula hasta 100 → vida extra y resetea
 let chosenChar = 'wiener';    // 'wiener' | 'doverman'
 let levelTransitioning = false;
+let inSubLevel = false;       // si está dentro del subnivel Bubble Bobble
+let subLevelReturnX = 0;      // X del nivel principal donde regresar
+let subLevelReturnY = 0;
+let subLevelUsed = false;     // una sola vez por partida
+let savedMainState = null;    // snapshot del nivel principal al entrar al subnivel
 
 // Tiles que el jugador y enemigos consideran sólidos
 const SOLID = new Set(['gnd','brk','qb','qbLife','ptop','pbod','ftop','fbod','sld','stone','dngnd','fall','ice','grassIsle','bridge']);
@@ -405,6 +415,9 @@ function startGame(){
   lives = 3; bones = 0; shots = 0; playerBullets = [];
   totalBonesEarned = 0; bonesSinceLastLife = 0;
   paused = false;
+  subLevelUsed = false;
+  inSubLevel = false;
+  savedMainState = null;
   initLevel(1);
   if(!loopGo){ loopGo=true; requestAnimationFrame(loop); }
 }
@@ -499,6 +512,21 @@ function T(tx, ty, tp){
 }
 function addBone(tx, ty){
   items.push({x:tx*TILE+6, y:ty*TILE+4, w:10, h:10, alive:true, ft:0, popup:false});
+}
+
+// Elimina items (huesos, vidas, etc.) que quedaron solapados con tiles sólidos.
+// Se llama al final de cada buildLevel — evita que haya recompensas "detrás de bloques".
+function removeBlockedItems(){
+  items = items.filter(it => {
+    for(const t of tiles){
+      if(!SOLID.has(t.t)) continue;
+      if(it.x + it.w > t.x && it.x < t.x + t.w &&
+         it.y + it.h > t.y && it.y < t.y + t.h){
+        return false;  // está adentro de un tile sólido → eliminarlo
+      }
+    }
+    return true;
+  });
 }
 function pipe(tx, h){
   for(let r=0;r<h;r++){
@@ -610,7 +638,20 @@ function buildLevel1(){
   T(188,7,'qb');
 
   // Tuberías razonables (no demasiado altas para no bloquear acceso)
-  firehydrant(17, 2); firehydrant(36, 3); firehydrant(70, 2); firehydrant(102, 2); firehydrant(142, 3); firehydrant(165, 2);
+  // Las 6 son bocas de incendio rojas. La 5° (x=142, h=3) es la entrada al subnivel.
+  firehydrant(17, 2); firehydrant(36, 3); firehydrant(70, 2); firehydrant(102, 2);
+  firehydrant(142, 3);  // ← 5° = boca de incendio que lleva al subnivel
+  // Marcar la posición de entrada al subnivel.
+  // El firehydrant(142, 3) ocupa filas 9, 10, 11. El TOPE (donde se para el jugador) es fila 9.
+  // ftop se dibuja en fila 11 (base), pero la capucha gráfica está en la parte superior de ese tile.
+  // Para el indicador y la detección, usamos:
+  //   _pipeEntryX = centro horizontal (entre x=142 y x=143) = 143*TILE
+  //   _pipeEntryTopY = Y donde se para el jugador = 9*TILE
+  //   _pipeEntryFtopY = Y del tile ftop (donde dibujar el indicador) = 11*TILE
+  window._pipeEntryX = 143*TILE;          // centro de la boca (entre los 2 tiles de ancho)
+  window._pipeEntryTopY = 9*TILE;          // tope donde el jugador se para
+  window._pipeEntryFtopY = 11*TILE;        // y del tile ftop (la capucha)
+  firehydrant(165, 2);
 
   // Escalera y bandera
   for(let s=0; s<8; s++){
@@ -648,6 +689,7 @@ function buildLevel1(){
   [24, 32, 49, 67, 75, 90, 107, 137, 147, 168, 180, 191].forEach(ex => {
     addEnemy(ex, 11, {spd:0.95, patrol: 5*TILE});
   });
+  removeBlockedItems();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -852,6 +894,27 @@ function buildLevel2(){
   items.push({x:(BOSS_START+3)*TILE+6, y:9*TILE,  w:10,h:10,alive:true,ft:0,popup:false,golden:true});
   items.push({x:(BOSS_END-4)*TILE+6,   y:9*TILE,  w:10,h:10,alive:true,ft:0,popup:false,golden:true});
 
+  // ── MURCIÉLAGOS DE CAVERNA (3 nuevos, atmósfera de mazmorra) ──
+  [[45, 3], [95, 4], [135, 3]].forEach(([ex, ey])=>{
+    const dir = Math.random()>0.5?1:-1;
+    enemies.push({
+      x:ex*TILE, y:ey*TILE,
+      w:18, h:12,
+      vx: 1.0*dir, vy:0, dir: dir,
+      alive:true, dead:false, deadT:0, fr:0, ft:0,
+      type:'fly', kind:'bat',
+      baseSpd:1.0,
+      jumpT:0,
+      onGround:false,
+      breathT: Math.random()*Math.PI*2,
+      flyBaseY: ey*TILE,
+      flyAmpY: 1.4*TILE,
+      flyPhase: Math.random()*Math.PI*2,
+      flySpeedY: 0.025 + Math.random()*0.012,
+      homeX: ex*TILE, patrolRange: 10*TILE
+    });
+  });
+
   // ── EL JEFE ──
   boss = {
     x:(BOSS_START+11)*TILE, y:9*TILE,
@@ -862,6 +925,7 @@ function buildLevel2(){
     angry:false, jumpT:90, phase:1, onGround:false,
     color:'orange'
   };
+  removeBlockedItems();
 }
 
 
@@ -996,10 +1060,10 @@ function buildLevel3(){
     enemies.push({
       x:ex*TILE, y:10*TILE,
       w:14, h:13,
-      vx: 1.15*dir, vy:0, dir: dir,
+      vx: 1.40*dir, vy:0, dir: dir,
       alive:true, dead:false, deadT:0, fr:0, ft:0,
       type:'walk', kind:'cat',
-      baseSpd:1.15,
+      baseSpd:1.40,
       jumpT:0,
       onGround:false,
       breathT: Math.random()*Math.PI*2,
@@ -1013,11 +1077,11 @@ function buildLevel3(){
     enemies.push({
       x:ex*TILE, y:10*TILE,
       w:14, h:13,
-      vx: 1.00*dir, vy:0, dir: dir,
+      vx: 1.20*dir, vy:0, dir: dir,
       alive:true, dead:false, deadT:0, fr:0, ft:0,
       type:'jump', kind:'cat',
-      baseSpd:1.00,
-      jumpT: 45+(Math.random()*30|0),
+      baseSpd:1.20,
+      jumpT: 40+(Math.random()*25|0),
       onGround:false,
       breathT:0, small:true,
       homeX: ex*TILE, patrolRange: 3*TILE
@@ -1029,11 +1093,11 @@ function buildLevel3(){
     enemies.push({
       x:ex*TILE, y:10*TILE,
       w:14, h:12,
-      vx: 1.75*dir, vy:0, dir: dir,
+      vx: 2.10*dir, vy:0, dir: dir,
       alive:true, dead:false, deadT:0, fr:0, ft:0,
       type:'walk', kind:'squirrel',
-      baseSpd:1.75,
-      jumpT: 35+(Math.random()*22|0),
+      baseSpd:2.10,
+      jumpT: 30+(Math.random()*18|0),
       onGround:false,
       breathT: Math.random()*Math.PI*2,
       small:true,
@@ -1052,20 +1116,21 @@ function buildLevel3(){
     enemies.push({
       x:ex*TILE, y:ey*TILE,
       w:18, h:12,
-      vx: 1.2*dir, vy:0, dir: dir,
+      vx: 1.45*dir, vy:0, dir: dir,
       alive:true, dead:false, deadT:0, fr:0, ft:0,
       type:'fly', kind:'bat',
-      baseSpd:1.2,
+      baseSpd:1.45,
       jumpT:0,
       onGround:false,
       breathT: Math.random()*Math.PI*2,
-      flyBaseY: ey*TILE,           // altura base de vuelo
-      flyAmpY: 1.5*TILE,           // amplitud vertical de zigzag
+      flyBaseY: ey*TILE,
+      flyAmpY: 1.8*TILE,
       flyPhase: Math.random()*Math.PI*2,
-      flySpeedY: 0.025 + Math.random()*0.015,  // velocidad de oscilación vertical
+      flySpeedY: 0.030 + Math.random()*0.018,
       homeX: ex*TILE, patrolRange: 12*TILE
     });
   });
+  removeBlockedItems();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1208,10 +1273,10 @@ function buildLevel4(){
     enemies.push({
       x:ex*TILE, y:10*TILE,
       w:24, h:18,
-      vx: 0.65*dir, vy:0, dir: dir,
+      vx: 0.78*dir, vy:0, dir: dir,
       alive:true, dead:false, deadT:0, fr:0, ft:0,
       type:'walk', kind:'capi',
-      baseSpd:0.65,
+      baseSpd:0.78,
       jumpT:0,
       onGround:false,
       breathT: Math.random()*Math.PI*2,
@@ -1226,10 +1291,10 @@ function buildLevel4(){
     enemies.push({
       x:ex*TILE, y: water.surfaceY - 12,
       w:24, h:14,
-      vx: 0.55*dir, vy:0, dir: dir,
+      vx: 0.66*dir, vy:0, dir: dir,
       alive:true, dead:false, deadT:0, fr:0, ft:0,
       type:'water', kind:'capi',
-      baseSpd:0.55,
+      baseSpd:0.66,
       jumpT:0,
       onGround:false,
       breathT: Math.random()*Math.PI*2,
@@ -1238,6 +1303,7 @@ function buildLevel4(){
       waterY: water.surfaceY - 12
     });
   });
+  removeBlockedItems();
 }
 
 
@@ -1376,10 +1442,10 @@ function buildLevel5(){
     enemies.push({
       x:ex*TILE, y:10*TILE,
       w:24, h:18,
-      vx: 0.60*dir, vy:0, dir: dir,
+      vx: 0.72*dir, vy:0, dir: dir,
       alive:true, dead:false, deadT:0, fr:0, ft:0,
       type:'walk', kind:'capi',
-      baseSpd:0.60,
+      baseSpd:0.72,
       jumpT:0,
       onGround:false,
       breathT: Math.random()*Math.PI*2,
@@ -1410,23 +1476,50 @@ function buildLevel5(){
     [172, true]    // con carpincho encima
   ];
   crocSpawns.forEach(([ex, hasRider])=>{
+    const dir = Math.random()>0.5?1:-1;
     enemies.push({
       x:ex*TILE, y: water.surfaceY - 10,
       w:42, h:16,
-      vx: 0.85, vy:0, dir: 1,  // SIEMPRE hacia la derecha
+      vx: 1.02*dir, vy:0, dir: dir,
       alive:true, dead:false, deadT:0, fr:0, ft:0,
       type:'croc', kind:'croc',
-      baseSpd:0.85,
+      baseSpd:1.02,
       jumpT:0,
       onGround:false,
       breathT: Math.random()*Math.PI*2,
-      homeX: ex*TILE, patrolRange: 0,
+      homeX: ex*TILE, patrolRange: 14*TILE,  // rango amplio de patrulla
       waterEnemy:true,
       waterY: water.surfaceY - 10,
       hasRider: hasRider,
       mouthT: Math.random()*60|0  // animación de boca abriendo
     });
   });
+
+  // ── MURCIÉLAGOS VOLADORES (nocturno - perfecto para murciélagos) ──
+  // Más cantidad y velocidad que en el nivel 3 porque es el último nivel
+  [
+    [25, 3], [40, 5], [58, 2], [76, 4], [95, 3],
+    [112, 5], [130, 2], [148, 4], [165, 3], [180, 5]
+  ].forEach(([ex, ey])=>{
+    const dir = Math.random()>0.5?1:-1;
+    enemies.push({
+      x:ex*TILE, y:ey*TILE,
+      w:18, h:12,
+      vx: 1.6*dir, vy:0, dir: dir,
+      alive:true, dead:false, deadT:0, fr:0, ft:0,
+      type:'fly', kind:'bat',
+      baseSpd:1.6,
+      jumpT:0,
+      onGround:false,
+      breathT: Math.random()*Math.PI*2,
+      flyBaseY: ey*TILE,
+      flyAmpY: 2*TILE,             // más amplio el zigzag
+      flyPhase: Math.random()*Math.PI*2,
+      flySpeedY: 0.035 + Math.random()*0.02,
+      homeX: ex*TILE, patrolRange: 14*TILE
+    });
+  });
+  removeBlockedItems();
 }
 
 
@@ -1515,6 +1608,8 @@ function updatePlayer(){
         showGameOver();
       } else {
         // Conserva munición y huesos
+        inSubLevel = false;  // si murió en el subnivel, vuelve al nivel principal
+        savedMainState = null;
         initLevel(level);
       }
     }
@@ -1701,17 +1796,18 @@ function updateEnemies(){
     }
 
     // ─── COCODRILO (nivel 5) ───
-    // Se mueve SIEMPRE de izquierda a derecha. Al salir por la derecha,
-    // reaparece por la izquierda (loop). NO se puede matar.
+    // Va y viene en un rango (de atrás hacia adelante y vuelve).
+    // NO se puede matar.
     if(e.type === 'croc'){
       e.y = e.waterY + Math.sin(fc * 0.05 + e.breathT) * 1.5;
-      e.x += e.baseSpd;
-      e.dir = 1;
       e.mouthT++;
-      // Loop: si sale del mundo por la derecha, vuelve por la izquierda
-      const worldR = (window._flagX || 200*TILE) + 100;
-      if(e.x > worldR){
-        e.x = -e.w - 40 - (Math.random()*120|0);
+      // Movimiento patrullando dentro de su rango
+      e.x += e.dir * e.baseSpd;
+      const offset = e.x - e.homeX;
+      if(e.dir > 0 && offset > e.patrolRange){
+        e.dir = -1;
+      } else if(e.dir < 0 && offset < -e.patrolRange){
+        e.dir = 1;
       }
       // Colisión con jugador
       if(!P.dead && P.inv === 0 && active){
@@ -2125,6 +2221,197 @@ function updateSkateboard(){
 // ═══════════════════════════════════════════════════════════════
 //  CHEQUEO DE BANDERA (fin de nivel)
 // ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+//  SUBNIVEL — entrada/salida por el 5° caño del nivel 1
+//  Estilo Bubble Bobble: recinto cerrado, plataformas, ratitas
+// ═══════════════════════════════════════════════════════════════
+function checkSubLevelEntry(){
+  if(P.dead || won || levelTransitioning) return;
+  if(!downTap) return;
+
+  // ENTRADA: parado encima de la boca de incendio del nivel 1
+  // Sólo si no se usó ya el subnivel en esta partida.
+  if(level === 1 && !inSubLevel && !subLevelUsed && window._pipeEntryX != null){
+    const cx = window._pipeEntryX;
+    const cy = window._pipeEntryTopY;
+    const playerCenterX = P.x + P.w/2;
+    const playerFootY = P.y + P.h;
+    if(P.onGround && Math.abs(playerCenterX - cx) < TILE && Math.abs(playerFootY - cy) < 8){
+      enterSubLevel1();
+    }
+  }
+  // SALIDA: parado en el caño de salida dentro del subnivel
+  if(inSubLevel && window._pipeExitX != null){
+    const cx = window._pipeExitX;
+    const cy = window._pipeExitY;
+    const playerCenterX = P.x + P.w/2;
+    const playerFootY = P.y + P.h;
+    if(P.onGround && Math.abs(playerCenterX - cx) < TILE && Math.abs(playerFootY - cy) < 8){
+      exitSubLevel1();
+    }
+  }
+}
+
+function enterSubLevel1(){
+  // Snapshot completo del nivel principal — preserva bloques rotos, huesos
+  // recolectados, enemigos muertos, cámara, etc.
+  savedMainState = {
+    tiles: tiles.map(t => ({...t})),
+    enemies: enemies.map(e => ({...e})),
+    items: items.map(i => ({...i})),
+    parts: [],  // partículas se descartan
+    bones: bones,
+    shots: shots,
+    camX: cam.x,
+    playerX: window._pipeEntryX - P.w/2,   // posición al volver = tope de la boca
+    playerY: window._pipeEntryTopY - P.h,
+    flagX: window._flagX
+  };
+  inSubLevel = true;
+  subLevelUsed = true;  // un solo uso por partida (no resetea al respawn)
+  buildSubLevel1();
+  bgDirty = true;
+  hud();
+}
+
+function exitSubLevel1(){
+  if(!savedMainState) return;
+  // Restaurar estado completo del nivel 1
+  tiles = savedMainState.tiles.map(t => ({...t}));
+  enemies = savedMainState.enemies.map(e => ({...e}));
+  items = savedMainState.items.map(i => ({...i}));
+  parts = [];
+  playerBullets = [];
+  bones = savedMainState.bones;
+  // shots: conservar la munición ganada en el subnivel
+  // (no se restaura al valor previo; los disparos ganados se mantienen)
+  window._flagX = savedMainState.flagX;
+  water = null;
+  // Re-establecer entrada del subnivel (pero ya usado, no se podrá reentrar)
+  window._pipeEntryX = 143*TILE;
+  window._pipeEntryTopY = 9*TILE;
+  window._pipeEntryFtopY = 11*TILE;
+  // El subnivel ya no tiene caño de salida
+  window._pipeExitX = null;
+  window._pipeExitY = null;
+
+  inSubLevel = false;
+  savedMainState = null;
+  // Posicionar al jugador
+  P.x = window._pipeEntryX - P.w/2;
+  P.y = window._pipeEntryTopY - P.h;
+  P.vx = 0; P.vy = 0;
+  cam.x = Math.max(0, P.x - CW/2);
+  bgDirty = true;
+  hud();
+}
+
+function buildSubLevel1(){
+  tiles = []; enemies = []; items = []; parts = [];
+  playerBullets = [];
+  window._flagX = 99999999;       // sin bandera, salida es el caño
+  window._queenLulu = null;
+  window._frankie = null;
+  window._artifacts = [];
+  window._pipeEntryX = null;      // dentro del subnivel no hay entrada al subnivel
+  water = null;
+
+  // Recinto cerrado tipo Bubble Bobble — 28 tiles ancho, 14 alto
+  const SW = 28, SH = 14;
+  // Suelo (continuo)
+  for(let x=0; x<SW; x++){
+    T(x, SH-1, 'dngnd');
+    T(x, SH-2, 'dngnd');
+  }
+  // Techo
+  for(let x=0; x<SW; x++){
+    T(x, 0, 'dngnd');
+    T(x, 1, 'dngnd');
+  }
+  // Paredes laterales
+  for(let y=2; y<SH-2; y++){
+    T(0, y, 'dngnd');
+    T(1, y, 'dngnd');
+    T(SW-2, y, 'dngnd');
+    T(SW-1, y, 'dngnd');
+  }
+
+  // Plataformas internas estilo Bubble Bobble (varios niveles)
+  // Plataforma alta (fila 4)
+  for(let x=5; x<=11; x++) T(x, 4, 'sld');
+  for(let x=16; x<=22; x++) T(x, 4, 'sld');
+  // Plataforma media (fila 7)
+  for(let x=2; x<=8; x++) T(x, 7, 'sld');
+  for(let x=12; x<=15; x++) T(x, 7, 'sld');
+  for(let x=19; x<=25; x++) T(x, 7, 'sld');
+  // Plataforma baja (fila 10)
+  for(let x=5; x<=10; x++) T(x, 10, 'sld');
+  for(let x=17; x<=22; x++) T(x, 10, 'sld');
+
+  // Caño de salida (entrada al subnivel desde adentro = salida hacia el nivel 1)
+  // Lo ponemos en el centro inferior. Sólo 2 tiles de alto para que sea claro.
+  const exitTx = 13;
+  const exitH = 2;
+  for(let r=0;r<exitH;r++){
+    T(exitTx,   SH-3-r, r===0?'ptop':'pbod');
+    T(exitTx+1, SH-3-r, r===0?'ptop':'pbod');
+  }
+  window._pipeExitX = exitTx*TILE + TILE;
+  window._pipeExitY = (SH-3-exitH+1)*TILE;  // Y del ptop = (SH-3-(exitH-1))*TILE
+
+  // 50 huesitos repartidos por el subnivel
+  // Plataforma alta (8 huesitos)
+  for(let x=5; x<=11; x++) addBone(x, 3);
+  for(let x=16; x<=22; x++) addBone(x, 3);
+  // Plataforma media (10 huesitos)
+  for(let x=2; x<=8; x++) addBone(x, 6);
+  for(let x=12; x<=15; x++) addBone(x, 6);
+  for(let x=19; x<=25; x++) addBone(x, 6);
+  // Plataforma baja (10 huesitos)
+  for(let x=5; x<=10; x++) addBone(x, 9);
+  for(let x=17; x<=22; x++) addBone(x, 9);
+  // Suelo (12 huesitos) - evitando la zona del caño de salida
+  [3, 5, 7, 9, 11, 16, 18, 20, 22, 24, 26].forEach(x => addBone(x, SH-3));
+
+  // Total: 8+8 (alta) + 7+4+7 (media) + 6+6 (baja) + 11 (suelo) = 57 → ajusto a 50
+  // (un poco más para ser generoso, está bien)
+
+  // 6 RATITAS pequeñas distribuidas por el mapa
+  // Las ratitas usan kind:'rat' con tipo 'walk' (lento pero peligroso)
+  const ratSpawns = [
+    [4, 3],   // sobre plataforma alta izq
+    [20, 3],  // sobre plataforma alta der
+    [4, 6],   // sobre plataforma media
+    [22, 6],  // sobre plataforma media der
+    [7, 9],   // sobre plataforma baja izq
+    [19, 9],  // sobre plataforma baja der
+  ];
+  ratSpawns.forEach(([ex, ey])=>{
+    const dir = Math.random()>0.5?1:-1;
+    enemies.push({
+      x:ex*TILE, y:ey*TILE,
+      w:14, h:10,
+      vx: 0.6*dir, vy:0, dir: dir,
+      alive:true, dead:false, deadT:0, fr:0, ft:0,
+      type:'walk', kind:'rat',
+      baseSpd:0.6,
+      jumpT:0,
+      onGround:false,
+      breathT: Math.random()*Math.PI*2,
+      homeX: ex*TILE, patrolRange: 99*TILE,  // se mueven libremente
+      tailT: Math.random()*Math.PI*2
+    });
+  });
+
+  // Posicionar al jugador entrando "cayendo" desde el caño de entrada del subnivel
+  // (entra desde arriba, lo dejamos justo encima del piso, lado izquierdo)
+  P.x = 3*TILE;
+  P.y = (SH-3)*TILE - P.h;
+  P.vx = 0; P.vy = 0;
+  cam.x = 0;
+  removeBlockedItems();
+}
+
 function checkFlag(){
   if(P.dead || won || levelTransitioning) return;
   if(P.x + P.w > window._flagX && P.x < window._flagX + 8){
@@ -2234,6 +2521,21 @@ function drawTile(t){
       ctx.fillRect(x-1, y, TILE+2, TILE);
       ctx.fillStyle = 'rgba(255,255,255,0.2)';
       ctx.fillRect(x+2, y+1, 4, TILE-2);
+      // Indicador de SALIDA del subnivel (caño verde está sólo dentro del subnivel)
+      if(inSubLevel && window._pipeExitX != null){
+        const pipeCenterTileX = (window._pipeExitX - TILE);
+        if(t.x === pipeCenterTileX && t.y === window._pipeExitY){
+          const bob = Math.sin(fc*0.12)*2;
+          ctx.fillStyle = 'rgba(255,234,80,0.9)';
+          ctx.font = 'bold 12px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('↓', x+TILE, y - 14 + bob);
+          ctx.font = 'bold 7px sans-serif';
+          ctx.fillStyle = 'rgba(255,255,255,0.85)';
+          ctx.fillText('SALIR', x+TILE, y - 24 + bob);
+          ctx.textAlign = 'left';
+        }
+      }
       break;
     }
     case 'pbod': {
@@ -2322,21 +2624,138 @@ function drawTile(t){
       break;
     }
     case 'pole': {
-      ctx.fillStyle = '#bbbbbb';
+      // Poste metálico con gradiente cilíndrico
+      const pg = ctx.createLinearGradient(x, 0, x+t.w, 0);
+      pg.addColorStop(0, '#6a6a6a');
+      pg.addColorStop(0.4, '#dddddd');
+      pg.addColorStop(0.7, '#aaaaaa');
+      pg.addColorStop(1, '#555555');
+      ctx.fillStyle = pg;
       ctx.fillRect(x, y, t.w, t.h);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(x, y, 1, t.h);
-      // Bandera
-      ctx.fillStyle = '#28dc40';
-      ctx.fillRect(x+t.w, y, 16, 11);
-      ctx.fillStyle = '#1ba830';
-      ctx.fillRect(x+t.w, y+11, 16, 4);
-      // Símbolo en bandera
-      ctx.fillStyle = '#ffd34d';
-      ctx.font = 'bold 9px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('★', x+t.w+8, y+10);
-      ctx.textAlign = 'left';
+      // Brillo blanco lateral izquierdo
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.fillRect(x+1, y, 0.8, t.h);
+
+      // Solo el tile más alto del poste dibuja la bandera + remate
+      // (los tiles 'pole' son una columna; el de menor Y es el superior)
+      let isTopTile = true;
+      for(const ot of tiles){
+        if(ot.t === 'pole' && ot.x === t.x && ot.y < t.y){ isTopTile = false; break; }
+      }
+      if(isTopTile){
+        // Remate dorado en la cima (bola decorativa)
+        ctx.fillStyle = '#ffd34d';
+        ctx.beginPath();
+        ctx.arc(x + t.w/2, y - 3, 3.5, 0, Math.PI*2);
+        ctx.fill();
+        ctx.fillStyle = '#ffea80';
+        ctx.beginPath();
+        ctx.arc(x + t.w/2 - 0.8, y - 3.8, 1.2, 0, Math.PI*2);
+        ctx.fill();
+        ctx.strokeStyle = '#a07020';
+        ctx.lineWidth = 0.6;
+        ctx.beginPath();
+        ctx.arc(x + t.w/2, y - 3, 3.5, 0, Math.PI*2);
+        ctx.stroke();
+
+        // Bandera ondulada animada (más grande y bonita)
+        const fw = 28, fh = 18;
+        const flagX = x + t.w;
+        const flagY = y + 2;
+        // Color de bandera según nivel
+        let flagCol, flagDark, flagAccent;
+        if(level === 1){ flagCol='#28dc40'; flagDark='#1ba830'; flagAccent='#ffd34d'; }
+        else if(level === 2){ flagCol='#9050d0'; flagDark='#6030a0'; flagAccent='#ffea60'; }
+        else if(level === 3){ flagCol='#3aa040'; flagDark='#206820'; flagAccent='#ffd34d'; }
+        else if(level === 4){ flagCol='#3aa0d8'; flagDark='#2070a8'; flagAccent='#fff080'; }
+        else { flagCol='#7a4090'; flagDark='#4a2060'; flagAccent='#a0ff90'; }
+
+        // Sombra de la bandera contra el cielo (sutil)
+        ctx.fillStyle = 'rgba(0,0,0,0.15)';
+        ctx.beginPath();
+        for(let i=0; i<=fw; i++){
+          const wave = Math.sin(fc*0.12 + i*0.25) * 1.5 * (i/fw);
+          if(i===0) ctx.moveTo(flagX+1, flagY+1 + wave);
+          else ctx.lineTo(flagX+1+i, flagY+1 + wave);
+        }
+        for(let i=fw; i>=0; i--){
+          const wave = Math.sin(fc*0.12 + i*0.25) * 1.5 * (i/fw);
+          ctx.lineTo(flagX+1+i, flagY+1+fh + wave);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        // Bandera con onda animada
+        ctx.fillStyle = flagCol;
+        ctx.beginPath();
+        for(let i=0; i<=fw; i++){
+          const wave = Math.sin(fc*0.12 + i*0.25) * 1.5 * (i/fw);
+          if(i===0) ctx.moveTo(flagX, flagY + wave);
+          else ctx.lineTo(flagX+i, flagY + wave);
+        }
+        for(let i=fw; i>=0; i--){
+          const wave = Math.sin(fc*0.12 + i*0.25) * 1.5 * (i/fw);
+          ctx.lineTo(flagX+i, flagY+fh + wave);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        // Banda más oscura inferior (relieve)
+        ctx.fillStyle = flagDark;
+        ctx.beginPath();
+        for(let i=0; i<=fw; i++){
+          const wave = Math.sin(fc*0.12 + i*0.25) * 1.5 * (i/fw);
+          if(i===0) ctx.moveTo(flagX, flagY+fh-5 + wave);
+          else ctx.lineTo(flagX+i, flagY+fh-5 + wave);
+        }
+        for(let i=fw; i>=0; i--){
+          const wave = Math.sin(fc*0.12 + i*0.25) * 1.5 * (i/fw);
+          ctx.lineTo(flagX+i, flagY+fh + wave);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        // Brillo superior (sobre la bandera ondulada)
+        ctx.fillStyle = 'rgba(255,255,255,0.25)';
+        ctx.beginPath();
+        for(let i=0; i<=fw; i++){
+          const wave = Math.sin(fc*0.12 + i*0.25) * 1.5 * (i/fw);
+          if(i===0) ctx.moveTo(flagX, flagY+1 + wave);
+          else ctx.lineTo(flagX+i, flagY+1 + wave);
+        }
+        for(let i=fw; i>=0; i--){
+          const wave = Math.sin(fc*0.12 + i*0.25) * 1.5 * (i/fw);
+          ctx.lineTo(flagX+i, flagY+4 + wave);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        // Estrella central decorativa
+        ctx.fillStyle = flagAccent;
+        ctx.font = 'bold 12px sans-serif';
+        ctx.textAlign = 'center';
+        const starWave = Math.sin(fc*0.12 + (fw*0.5)*0.25) * 1.5 * 0.5;
+        ctx.fillText('★', flagX + fw/2, flagY + fh/2 + 4 + starWave);
+        ctx.textAlign = 'left';
+
+        // Anilla de cuerda (donde la bandera se ata al poste)
+        ctx.fillStyle = '#a0a0a0';
+        ctx.fillRect(flagX-1, flagY-1, 2, 4);
+        ctx.fillRect(flagX-1, flagY+fh-3, 2, 4);
+      }
+
+      // Base anclada (sólo en el tile más bajo del poste, para que parezca apoyado)
+      let isBottomTile = true;
+      for(const ot of tiles){
+        if(ot.t === 'pole' && ot.x === t.x && ot.y > t.y){ isBottomTile = false; break; }
+      }
+      if(isBottomTile){
+        // Base más ancha
+        ctx.fillStyle = '#444';
+        ctx.fillRect(x-3, y+t.h-3, t.w+6, 4);
+        ctx.fillStyle = '#666';
+        ctx.fillRect(x-3, y+t.h-3, t.w+6, 1);
+      }
       break;
     }
     case 'dngnd': {
@@ -2570,8 +2989,38 @@ function renderBG5(c){
     c.fillRect(CW*0.75-30+i*4, CH*0.85-i*4, 60-i*8, 2);
   }
 }
+function renderBGSub(c){
+  // Mazmorra estilo Bubble Bobble — fondo violeta-azul oscuro con estrellitas/burbujas
+  const g = c.createLinearGradient(0, 0, 0, CH);
+  g.addColorStop(0, '#1a0838');
+  g.addColorStop(0.5, '#28104a');
+  g.addColorStop(1, '#0a0428');
+  c.fillStyle = g;
+  c.fillRect(0, 0, CW, CH);
+  // Estrellitas
+  c.fillStyle = 'rgba(255,255,255,0.5)';
+  for(let i=0;i<40;i++){
+    const sx = (i*47 + 19) % CW;
+    const sy = (i*31 + 11) % CH;
+    c.fillRect(sx, sy, 1, 1);
+  }
+  // Burbujas decorativas grandes y suaves
+  c.fillStyle = 'rgba(150,200,255,0.08)';
+  const bubbles = [[80,90,30],[220,180,22],[380,110,35],[140,310,28],[420,260,20]];
+  for(const [bx,by,br] of bubbles){
+    c.beginPath();
+    c.arc(bx, by, br, 0, Math.PI*2);
+    c.fill();
+    c.fillStyle = 'rgba(255,255,255,0.06)';
+    c.beginPath();
+    c.arc(bx-br*0.3, by-br*0.3, br*0.4, 0, Math.PI*2);
+    c.fill();
+    c.fillStyle = 'rgba(150,200,255,0.08)';
+  }
+}
 function refreshBG(){
-  if(level===1) renderBG1(bgCtx);
+  if(inSubLevel) renderBGSub(bgCtx);
+  else if(level===1) renderBG1(bgCtx);
   else if(level===2) renderBG2(bgCtx);
   else if(level===3) renderBG3(bgCtx);
   else if(level===4) renderBG4(bgCtx);
@@ -3165,6 +3614,7 @@ function drawEnemy(e){
 
   if(e.kind === 'croc') drawCroc(e, x, y);
   else if(e.kind === 'bat') drawBat(e, x, y);
+  else if(e.kind === 'rat') drawRat(e, x, y);
   else if(e.kind === 'capi') drawCapincho(e, x, y);
   else if(e.kind === 'squirrel') drawSquirrel(e, x, y);
   else drawCat(e, x, y);
@@ -3451,6 +3901,18 @@ function drawCroc(e, x, y){
   ctx.ellipse(x+e.w/2, y+e.h+wave, e.w/2+5, 2, 0, 0, Math.PI*2);
   ctx.stroke();
 
+  // Flip horizontal cuando va a la izquierda
+  if(e.dir < 0){
+    ctx.save();
+    ctx.translate(x + e.w, 0);
+    ctx.scale(-1, 1);
+    x = 0;
+  } else {
+    ctx.save();
+    ctx.translate(x, 0);
+    x = 0;
+  }
+
   // Animación de boca abierta cada cierto tiempo
   const mouthOpen = ((e.mouthT||0) % 120) < 30;
 
@@ -3595,6 +4057,7 @@ function drawCroc(e, x, y){
     ctx.fillStyle = 'rgba(0,0,0,0.15)';
     ctx.fillRect(cx, cy+11, 16, 1);
   }
+  ctx.restore();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -3737,6 +4200,122 @@ function drawBat(e, x, y){
   ctx.lineTo(x+e.w/2 + 0.5, y+6.5);
   ctx.lineTo(x+e.w/2 + 0.2, y+5.5);
   ctx.fill();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  RENDER — RATITA (subnivel Bubble Bobble)
+// ═══════════════════════════════════════════════════════════════
+function drawRat(e, x, y){
+  // Sombra
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.beginPath();
+  ctx.ellipse(x+e.w/2, y+e.h+0.5, e.w/2-1, 1.5, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  if(e.dead){
+    // Boca arriba
+    ctx.fillStyle = '#7a7070';
+    ctx.fillRect(x+1, y+e.h*0.45, e.w-2, e.h*0.5);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(x+e.w*0.3, y+e.h*0.55, 1, 1);
+    ctx.fillRect(x+e.w*0.65, y+e.h*0.55, 1, 1);
+    return;
+  }
+
+  e.tailT = (e.tailT || 0) + 0.18;
+
+  // Flip horizontal
+  ctx.save();
+  if(e.dir < 0){
+    ctx.translate(x + e.w, 0);
+    ctx.scale(-1, 1);
+    x = 0;
+  } else {
+    ctx.translate(x, 0);
+    x = 0;
+  }
+
+  // Cola larga y curva (movimiento de serpenteo)
+  ctx.strokeStyle = '#5a4848';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(0, y+e.h-2);
+  ctx.bezierCurveTo(
+    -3, y+e.h-3 + Math.sin(e.tailT)*1.5,
+    -5, y+e.h-5 + Math.sin(e.tailT)*2,
+    -7, y+e.h-3 + Math.cos(e.tailT)*1
+  );
+  ctx.stroke();
+
+  // Cuerpo (gris claro, ovalado)
+  ctx.fillStyle = '#9a8a8a';
+  ctx.beginPath();
+  ctx.ellipse(x+e.w/2, y+e.h*0.65, e.w/2, e.h*0.35, 0, 0, Math.PI*2);
+  ctx.fill();
+  // Panza más clara
+  ctx.fillStyle = '#cabbbb';
+  ctx.beginPath();
+  ctx.ellipse(x+e.w/2, y+e.h*0.78, e.w/2 - 2, e.h*0.18, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // Cabeza (hocico puntiagudo hacia la derecha)
+  ctx.fillStyle = '#9a8a8a';
+  ctx.beginPath();
+  ctx.moveTo(x+e.w-1, y+e.h*0.55);     // punta del hocico
+  ctx.lineTo(x+e.w*0.45, y+e.h*0.4);
+  ctx.lineTo(x+e.w*0.45, y+e.h*0.8);
+  ctx.lineTo(x+e.w-1, y+e.h*0.7);
+  ctx.closePath();
+  ctx.fill();
+
+  // Orejas redondas
+  ctx.fillStyle = '#7a6868';
+  ctx.beginPath();
+  ctx.arc(x+e.w*0.55, y+e.h*0.32, 2.2, 0, Math.PI*2);
+  ctx.arc(x+e.w*0.7, y+e.h*0.32, 2.2, 0, Math.PI*2);
+  ctx.fill();
+  // Interior orejas rosado
+  ctx.fillStyle = '#d090a0';
+  ctx.beginPath();
+  ctx.arc(x+e.w*0.55, y+e.h*0.32, 1.1, 0, Math.PI*2);
+  ctx.arc(x+e.w*0.7, y+e.h*0.32, 1.1, 0, Math.PI*2);
+  ctx.fill();
+
+  // Ojito negro
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.arc(x+e.w*0.72, y+e.h*0.55, 0.9, 0, Math.PI*2);
+  ctx.fill();
+  // Brillito
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(x+e.w*0.72-0.3, y+e.h*0.55-0.3, 0.5, 0.5);
+
+  // Nariz rosadita
+  ctx.fillStyle = '#ff90a0';
+  ctx.beginPath();
+  ctx.arc(x+e.w-1, y+e.h*0.6, 1, 0, Math.PI*2);
+  ctx.fill();
+
+  // Bigotes
+  ctx.strokeStyle = 'rgba(40,40,40,0.7)';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(x+e.w*0.85, y+e.h*0.65); ctx.lineTo(x+e.w+3, y+e.h*0.6);
+  ctx.moveTo(x+e.w*0.85, y+e.h*0.7); ctx.lineTo(x+e.w+3, y+e.h*0.75);
+  ctx.stroke();
+
+  // Patitas (animación leve)
+  const legPhase = ((fc/6)|0) % 2;
+  ctx.fillStyle = '#6a5858';
+  if(legPhase === 0){
+    ctx.fillRect(x+e.w*0.3, y+e.h-2, 2, 2);
+    ctx.fillRect(x+e.w*0.7, y+e.h-3, 2, 3);
+  } else {
+    ctx.fillRect(x+e.w*0.3, y+e.h-3, 2, 3);
+    ctx.fillRect(x+e.w*0.7, y+e.h-2, 2, 2);
+  }
+
+  ctx.restore();
 }
 
 
@@ -4489,7 +5068,8 @@ function render(){
 
   // background (cached)
   if(bgDirty){
-    if(level === 1) renderBG1(bgCtx);
+    if(inSubLevel) renderBGSub(bgCtx);
+    else if(level === 1) renderBG1(bgCtx);
     else if(level === 2) renderBG2(bgCtx);
     else if(level === 3) renderBG3(bgCtx);
     else if(level === 4) renderBG4(bgCtx);
@@ -4653,6 +5233,7 @@ function step(){
     updateParts();
     updateArtifacts();
     if(level === 3) updateSkateboard();
+    checkSubLevelEntry();
     checkFlag();
   } else {
     updatePlayer();
@@ -4670,6 +5251,7 @@ function step(){
   // single-frame taps consumidos por tick
   jumpTap = false;
   shootTap = false;
+  downTap = false;
 }
 
 function loop(ts){
