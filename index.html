@@ -71,7 +71,7 @@ canvas{
   display:none;             /* solo se muestra cuando isTouchDevice() */
   pointer-events:none;      /* permitir clicks sobre el canvas en zonas vacías */
   z-index:50;
-  padding:0 14px 24px 14px;
+  padding:0 18px 28px 18px;
   user-select:none;
   -webkit-user-select:none;
   -webkit-touch-callout:none;
@@ -81,12 +81,12 @@ canvas{
 .tc-side{
   pointer-events:auto;
   display:grid;
-  gap:6px;
+  gap:8px;
 }
 /* D-pad: 3 columnas, 2 filas (arriba en fila 1 centro; abajo en fila 2 con izq/centro/der) */
 .tc-dpad{
-  grid-template-columns: 56px 56px 56px;
-  grid-template-rows: 56px 56px;
+  grid-template-columns: 78px 78px 78px;
+  grid-template-rows: 78px 78px;
   grid-template-areas:
     ".  up  ."
     "left down right";
@@ -97,33 +97,39 @@ canvas{
 .tc-dpad .tc-btn[data-key="right"]{ grid-area: right; }
 /* Botones acción derecha */
 .tc-actions{
-  grid-template-columns: 60px 60px;
-  grid-template-rows: 60px 60px;
+  grid-template-columns: 86px 86px;
+  grid-template-rows: 86px 86px;
   grid-template-areas:
     ".      shoot"
     "jump   .";
-  gap:10px;
+  gap:14px;
 }
-.tc-actions .tc-btn[data-key="jump"]{ grid-area: jump; background:rgba(120,220,140,0.18); border-color:rgba(120,220,140,0.6); }
-.tc-actions .tc-btn[data-key="shoot"]{ grid-area: shoot; background:rgba(255,180,80,0.18); border-color:rgba(255,180,80,0.7); }
+.tc-actions .tc-btn[data-key="jump"]{ grid-area: jump; background:rgba(120,220,140,0.22); border-color:rgba(120,220,140,0.7); }
+.tc-actions .tc-btn[data-key="shoot"]{ grid-area: shoot; background:rgba(255,180,80,0.22); border-color:rgba(255,180,80,0.8); }
 .tc-btn{
-  background:rgba(255,255,255,0.08);
-  border:2px solid rgba(255,255,255,0.35);
+  background:rgba(255,255,255,0.10);
+  border:3px solid rgba(255,255,255,0.45);
   border-radius:50%;
   color:#fff;
   font-weight:800;
-  font-size:22px;
+  font-size:30px;
   display:flex;align-items:center;justify-content:center;
-  box-shadow:0 2px 8px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.18);
+  box-shadow:0 3px 12px rgba(0,0,0,0.5), inset 0 2px 0 rgba(255,255,255,0.22);
   -webkit-tap-highlight-color:transparent;
   transition: transform 0.08s, background 0.08s;
 }
 .tc-btn:active, .tc-btn.pressed{
   transform: scale(0.92);
-  background:rgba(255,255,255,0.30);
+  background:rgba(255,255,255,0.35);
 }
-.tc-actions .tc-btn[data-key="jump"].pressed{ background:rgba(120,220,140,0.5); }
-.tc-actions .tc-btn[data-key="shoot"].pressed{ background:rgba(255,180,80,0.55); }
+.tc-actions .tc-btn[data-key="jump"].pressed{ background:rgba(120,220,140,0.55); }
+.tc-actions .tc-btn[data-key="shoot"].pressed{ background:rgba(255,180,80,0.6); }
+/* Móviles pequeños: ajuste extra */
+@media (max-width: 380px){
+  .tc-dpad{ grid-template-columns: 64px 64px 64px; grid-template-rows: 64px 64px; }
+  .tc-actions{ grid-template-columns: 72px 72px; grid-template-rows: 72px 72px; }
+  .tc-btn{ font-size: 26px; }
+}
 
 /* ════════════ Pantalla de overlay (menús, mensajes) ════════════ */
 .overlay{
@@ -1405,14 +1411,6 @@ function spawnSparrows(n){
   }
 }
 
-// Agrega pasarelas extras (puentes suspendidos) en posiciones genéricas
-// para variar el layout en mundos 2 y 3 sin romper el nivel.
-// DESHABILITADA: las posiciones fijas resultan inaccesibles o tapan saltos críticos.
-// El layout sigue siendo casi idéntico entre mundos como solicitado.
-function addExtraBridges(){
-  // intencionalmente vacío
-}
-
 function pipe(tx, h){
   for(let r=0;r<h;r++){
     T(tx, 11-r, r===0?'ptop':'pbod');
@@ -1460,7 +1458,6 @@ function addEnemy(tx, ty, opts){
 function buildLevel1(){
   tiles=[]; enemies=[]; items=[]; parts=[];
   window._flagX = 99999999;
-  window._queenLulu = null;
   const LW = 220;
 
   // Suelo continuo con huecos manejables (siempre <=4 tiles)
@@ -1532,10 +1529,8 @@ function buildLevel1(){
   // Para el indicador y la detección, usamos:
   //   _pipeEntryX = centro horizontal (entre x=142 y x=143) = 143*TILE
   //   _pipeEntryTopY = Y donde se para el jugador = 9*TILE
-  //   _pipeEntryFtopY = Y del tile ftop (donde dibujar el indicador) = 11*TILE
   window._pipeEntryX = 143*TILE;          // centro de la boca (entre los 2 tiles de ancho)
   window._pipeEntryTopY = 9*TILE;          // tope donde el jugador se para
-  window._pipeEntryFtopY = 11*TILE;        // y del tile ftop (la capucha)
   firehydrant(165, 2);
 
   // Escalera y bandera
@@ -1586,7 +1581,6 @@ function buildLevel1(){
 function buildLevel2(){
   tiles=[]; enemies=[]; items=[]; parts=[];
   window._flagX = 99999999;
-  window._queenLulu = null;
   const BOSS_START = 168, BOSS_END = 192;
 
   // Suelo continuo (huecos solo en zona inicial pero salvables)
@@ -1764,14 +1758,14 @@ function buildLevel2(){
   });
 
   // ── SALA DEL JEFE ──
+  // Pared derecha (cierra la sala)
   for(let y=0; y<=11; y++){
     tiles.push({x:BOSS_END*TILE, y:y*TILE, w:TILE, h:TILE, t:'stone', hit:false});
   }
-  // Plataformas para saltar al jefe
-  for(let x=BOSS_START+1; x<=BOSS_START+5; x++) T(x, 7, 'stone');
-  for(let x=BOSS_END-6; x<=BOSS_END-2; x++)     T(x, 7, 'stone');
-  for(let x=BOSS_START+8; x<=BOSS_END-8; x++)   T(x, 4, 'stone');
+  // NOTA: Las plataformas dentro de la sala se eliminaron para que el boss
+  // pueda moverse libremente. El jugador salta encima del boss directamente.
 
+  // Stalactitas decorativas en el techo (no son sólidas)
   [BOSS_START+3, BOSS_START+10, BOSS_END-4].forEach(x => {
     tiles.push({x:x*TILE, y:2*TILE, w:TILE, h:TILE, t:'stalac', hit:false});
   });
@@ -1834,7 +1828,6 @@ function buildLevel2(){
 function buildLevel3(){
   tiles=[]; enemies=[]; items=[]; parts=[];
   window._flagX = 99999999;
-  window._queenLulu = null;
   window._skateboard = null;
   window._artifacts = [];
   const LW = 280;
@@ -2121,14 +2114,6 @@ function buildLevel4(){
   }
   window._flagX = 191*TILE;
 
-  // ── REINA LULU — perrita blanca Bichón Maltés esperando a ser rescatada ──
-  // Ubicada en la isla final, justo antes de la bandera
-  window._queenLulu = {
-    x: 188*TILE, y: 10*TILE - 18,
-    w: 22, h: 20,
-    bobT: 0, blinkT: 0, rescued: false
-  };
-
   // ── HUESOS — distribuidos sobre las islas, accesibles ──
   [
     [3,10],[5,10],[7,10],
@@ -2212,14 +2197,13 @@ function buildLevel4(){
 //  el agua moviéndose de izquierda a derecha (de atrás hacia adelante);
 //  algunos cocodrilos llevan un carpincho encima. Los animales del agua
 //  NO pueden matarse (igual que carpinchos acuáticos del N4).
-//  Al final: rescate de Frankie, la salchicha hembra.
+//  Al final: rescate de la princesa correspondiente al mundo (Lulu / Turna / Bamby).
 // ═══════════════════════════════════════════════════════════════
 function buildLevel5(){
   tiles=[]; enemies=[]; items=[]; parts=[];
   window._flagX = 99999999;
   window._artifacts = [];
-  window._queenLulu = null;
-  window._frankie = null;
+  window._princess = null;
   // Agua pantanosa: si caes, mueres (mismo sistema que nivel 4)
   water = { y: 12*TILE, surfaceY: 11*TILE + 6, swamp: true };
 
@@ -2296,7 +2280,7 @@ function buildLevel5(){
   //   Mundo 1: Lulu (Bichón Maltés)
   //   Mundo 2: Turna (Bulldog Francés)
   //   Mundo 3: Bamby (Salchicha entrada en años, reina madre)
-  window._frankie = {
+  window._princess = {
     x: 184*TILE, y: 10*TILE - 16,
     w: 28, h: 18,
     bobT: 0, blinkT: 0, rescued: false,
@@ -3089,15 +3073,15 @@ function updateBoss(){
       boss.vx += (desiredVx - boss.vx) * 0.18;
       boss.vx += Math.sin(boss.moveT * 0.1) * 0.3;
 
-      // Saltos cortos para acortar distancia o esquivar
-      if(boss.onGround && boss.aiTimer > 50 + (Math.random()*40|0)){
+      // Saltos cortos para acortar distancia o esquivar (jumpT separado)
+      boss.jumpT = (boss.jumpT || 0) - 1;
+      if(boss.onGround && boss.jumpT <= 0){
         boss.vy = (boss.angry ? -9 : -7);
-        boss.aiTimer = 0;
+        boss.jumpT = 50 + (Math.random()*40|0);
         burst(boss.x + boss.w/2, boss.y + boss.h, '#a060ff', 6);
       }
 
       // ELEGIR PRÓXIMO ATAQUE según contexto y cooldowns
-      // Si lleva 60+ frames en chase, probar un ataque
       if(boss.aiTimer > 50){
         // Dash (acometida horizontal rápida) si jugador está lejos
         if(distToPlayer > 80 && boss.dashCooldown === 0){
@@ -3374,18 +3358,19 @@ function updateBoss5(){
       const desiredVx = Math.sign(dxToPlayer) * baseSpd;
       boss.vx += (desiredVx - boss.vx) * 0.15;
 
-      // Saltos cortos cuando está en tierra
-      if(boss.onGround && boss.aiTimer > 35 + (Math.random()*30|0)){
+      // Saltos cortos cuando está en tierra (usa jumpT independiente, NO resetea aiTimer)
+      boss.jumpT = (boss.jumpT || 0) - 1;
+      if(boss.onGround && boss.jumpT <= 0){
         boss.vy = boss.angry ? -10 : -8;
-        boss.aiTimer = 0;
+        boss.jumpT = 40 + (Math.random()*30|0);
         burst(boss.x + boss.w/2, boss.y + boss.h, '#a06030', 8);
       }
       // Si en agua, salto periódico de buceo
-      if(boss.inWater && boss.aiTimer % 40 === 0 && boss.vy >= -1){
+      if(boss.inWater && boss.moveT % 50 === 0 && boss.vy >= -1){
         boss.vy = -7;
       }
 
-      // Elegir ataque
+      // Elegir ataque (aiTimer cuenta tiempo en chase sin reiniciarse)
       if(boss.aiTimer > 50){
         // Charge: si lejos
         if(distToPlayer > 80 && boss.chargeCooldown === 0){
@@ -3964,47 +3949,37 @@ function drawCarpiFather(){
 }
 
 function triggerBossDefeatTransition(){
-  const bossName = worldNum === 1 ? 'Gato Rey' : (worldNum === 2 ? 'Tigre Rey' : 'León Rey');
-  const bossName5 = worldNum === 1 ? 'Carpincho Madre' : (worldNum === 2 ? 'Carpincho Madre' : 'Carpincho Madre y Padre');
-  const isFinalBoss = level === 5;
-  const finalName = isFinalBoss ? bossName5 : bossName;
-  const subtitle = '¡Venciste al ' + finalName + '!';
   setTimeout(()=>{
     // Caso 1: Boss del nivel 2 → avanzar al nivel 3 del mismo mundo
     if(level < 5){
+      const bossName = worldNum === 1 ? 'Gato Rey'
+                     : worldNum === 2 ? 'Tigre Rey'
+                     : 'León Rey';
       const nextLvl = level + 1;
       showMsg('¡MUNDO ' + worldNum + '-' + level + ' COMPLETO!',
-        subtitle + ' Próximo: nivel ' + nextLvl,
+        '¡Venciste al ' + bossName + '! Próximo: nivel ' + nextLvl,
         'CONTINUAR',
         ()=>{ initLevel(nextLvl); });
       return;
     }
     // Caso 2: Boss del nivel 5 — fin del mundo actual
     if(worldNum < 3){
-      // Avanzar al siguiente MUNDO
-      const nextWorld = worldNum + 1;
-      const wTitle = nextWorld === 2 ? 'MUNDO TÉTRICO' : 'MUNDO FRENÉTICO';
-      const wSub = nextWorld === 2
-        ? 'Los enemigos son el doble de rápidos. Las ratitas se desatan.'
-        : 'Velocidad x2.5 + ratitas frenéticas + gorriones erráticos.';
-      showMsg('¡MUNDO ' + worldNum + ' COMPLETO!',
-        subtitle + '\n★ Entrando al MUNDO ' + nextWorld + ' · ' + wTitle + ' ★\n' + wSub,
-        'AVANZAR',
-        ()=>{
-          worldNum = nextWorld;
-          subLevelUsed = false;   // el subnivel está disponible en cada mundo
-          inSubLevel = false;
-          savedMainState = null;
-          initLevel(1);
-        });
+      // Pantalla de rescate de la princesa + avanzar al siguiente MUNDO
+      const finishedWorld = worldNum;
+      showWorldComplete(finishedWorld, ()=>{
+        worldNum = finishedWorld + 1;
+        subLevelUsed = false;
+        inSubLevel = false;
+        savedMainState = null;
+        loopGo = true;
+        initLevel(1);
+        requestAnimationFrame(loop);
+      });
     } else {
-      // Mundo 3 - nivel 5 → VICTORIA FINAL
-      showMsg('¡VICTORIA TOTAL!',
-        subtitle + '\n¡Rescataste a la Reina Bamby!',
-        'VER FINAL',
-        ()=>{
-          showFinalVictory();
-        });
+      // Mundo 3 - nivel 5 → rescate de Bamby + VICTORIA TOTAL
+      showWorldComplete(3, ()=>{
+        showFinalVictory();
+      });
     }
   }, 1100);
 }
@@ -4355,7 +4330,6 @@ function exitSubLevel1(){
   // Re-establecer entrada del subnivel (pero ya usado, no se podrá reentrar)
   window._pipeEntryX = 143*TILE;
   window._pipeEntryTopY = 9*TILE;
-  window._pipeEntryFtopY = 11*TILE;
   // El subnivel ya no tiene caño de salida
   window._pipeExitX = null;
   window._pipeExitY = null;
@@ -4375,8 +4349,7 @@ function buildSubLevel1(){
   tiles = []; enemies = []; items = []; parts = [];
   playerBullets = [];
   window._flagX = 99999999;       // sin bandera, salida es el caño
-  window._queenLulu = null;
-  window._frankie = null;
+  window._princess = null;
   window._artifacts = [];
   window._pipeEntryX = null;      // dentro del subnivel no hay entrada al subnivel
   water = null;
@@ -4497,25 +4470,22 @@ function checkFlag(){
     }
     // level === 5: fin del mundo actual
     if(worldNum < 3){
-      const nextWorld = worldNum + 1;
-      const wTitle = nextWorld === 2 ? 'MUNDO TÉTRICO' : 'MUNDO FRENÉTICO';
-      const wSub = nextWorld === 2
-        ? 'Los enemigos son el doble de rápidos. Las ratitas se desatan.'
-        : 'Velocidad x2.5 + ratitas frenéticas + gorriones erráticos.';
-      showMsg('¡MUNDO ' + worldNum + ' COMPLETO!',
-        '★ Entrando al MUNDO ' + nextWorld + ' · ' + wTitle + ' ★\n' + wSub,
-        'AVANZAR',
-        ()=>{
-          worldNum = nextWorld;
-          subLevelUsed = false;   // el subnivel está disponible en cada mundo
-          inSubLevel = false;
-          savedMainState = null;
-          initLevel(1);
-        });
+      const finishedWorld = worldNum;
+      showWorldComplete(finishedWorld, ()=>{
+        worldNum = finishedWorld + 1;
+        subLevelUsed = false;
+        inSubLevel = false;
+        savedMainState = null;
+        loopGo = true;
+        initLevel(1);
+        requestAnimationFrame(loop);
+      });
     } else {
-      // Mundo 3 - nivel 5 → victoria final
+      // Mundo 3 - nivel 5 → rescate de Bamby + VICTORIA FINAL
       setTimeout(()=>{
-        showFinalVictory();
+        showWorldComplete(3, ()=>{
+          showFinalVictory();
+        });
       }, 400);
     }
   }
@@ -5108,16 +5078,6 @@ function renderBGSub(c){
     c.fillStyle = 'rgba(150,200,255,0.08)';
   }
 }
-function refreshBG(){
-  if(inSubLevel) renderBGSub(bgCtx);
-  else if(level===1) renderBG1(bgCtx);
-  else if(level===2) renderBG2(bgCtx);
-  else if(level===3) renderBG3(bgCtx);
-  else if(level===4) renderBG4(bgCtx);
-  else if(level===5) renderBG5(bgCtx);
-  bgDirty = false;
-}
-
 // Capa parallax dinámica encima del bg cacheado
 function drawParallax(){
   if(level===1){
@@ -7161,175 +7121,15 @@ function drawSkateboardItem(){
   }
 }
 
-function drawQueenLulu(){
-  if(!window._queenLulu) return;
-  const q = window._queenLulu;
-  const screenX = q.x - cam.x;
-  if(screenX < -40 || screenX > CW + 40) return;
-  q.bobT = (q.bobT || 0) + 0.05;
-  q.blinkT = (q.blinkT || 0) + 1;
-  const bob = Math.sin(q.bobT) * 1.5;
-  const x = screenX, y = q.y + bob;
-
-  // ── Aura mágica de la reina ──
-  const auraGlow = 0.5 + Math.sin(fc*0.06)*0.5;
-  ctx.fillStyle = 'rgba(255,180,220,'+(0.15+auraGlow*0.12)+')';
-  ctx.beginPath();
-  ctx.arc(x+q.w/2, y+q.h/2, 28, 0, Math.PI*2);
-  ctx.fill();
-
-  // ── Sombra ──
-  ctx.fillStyle = 'rgba(0,0,0,0.25)';
-  ctx.beginPath();
-  ctx.ellipse(x+q.w/2, y+q.h+2, q.w/2, 3, 0, 0, Math.PI*2);
-  ctx.fill();
-
-  // ── Cuerpo (algodón blanco esponjoso) ──
-  // Capas de "pelo esponjoso" superpuestas para el efecto Bichón
-  ctx.fillStyle = '#fff';
-  // Cuerpo principal — más redondo que un salchicha, casi bola
-  ctx.beginPath();
-  ctx.ellipse(x+q.w/2, y+q.h*0.65, q.w/2 + 1, q.h*0.4, 0, 0, Math.PI*2);
-  ctx.fill();
-
-  // Pechera frontal esponjosa
-  ctx.fillStyle = '#fff';
-  ctx.beginPath();
-  ctx.arc(x+q.w*0.32, y+q.h*0.7, 5, 0, Math.PI*2);
-  ctx.arc(x+q.w*0.62, y+q.h*0.72, 5, 0, Math.PI*2);
-  ctx.fill();
-
-  // Patitas (apenas visibles bajo el pelaje)
-  ctx.fillStyle = '#f0e0d8';
-  ctx.fillRect(x+5, y+q.h-3, 3, 3);
-  ctx.fillRect(x+q.w-8, y+q.h-3, 3, 3);
-
-  // ── Cabeza redonda esponjosa ──
-  const hx = x + q.w*0.5, hy = y + q.h*0.32;
-  ctx.fillStyle = '#fff';
-  ctx.beginPath();
-  ctx.arc(hx, hy, 9, 0, Math.PI*2);
-  ctx.fill();
-  // Mejillas esponjosas (extras de pelo)
-  ctx.beginPath();
-  ctx.arc(hx-7, hy+3, 4, 0, Math.PI*2);
-  ctx.arc(hx+7, hy+3, 4, 0, Math.PI*2);
-  ctx.fill();
-
-  // ── Orejas largas caídas (rasgo distintivo del Maltés) ──
-  ctx.fillStyle = '#f8f8f8';
-  // Oreja izquierda
-  ctx.beginPath();
-  ctx.ellipse(hx-9, hy+4, 3.5, 7, -0.3, 0, Math.PI*2);
-  ctx.fill();
-  // Oreja derecha
-  ctx.beginPath();
-  ctx.ellipse(hx+9, hy+4, 3.5, 7, 0.3, 0, Math.PI*2);
-  ctx.fill();
-
-  // ── Hocico (cara) ──
-  ctx.fillStyle = '#f0e0d0';
-  ctx.beginPath();
-  ctx.arc(hx, hy+3, 3, 0, Math.PI*2);
-  ctx.fill();
-
-  // Nariz negra pequeña
-  ctx.fillStyle = '#1a1a1a';
-  ctx.beginPath();
-  ctx.arc(hx, hy+1.5, 1.2, 0, Math.PI*2);
-  ctx.fill();
-
-  // Ojos — parpadeo ocasional
-  const blink = (q.blinkT % 180) > 175;
-  if(blink){
-    // Cerrados
-    ctx.fillStyle = '#1a1a1a';
-    ctx.fillRect(hx-3.5, hy-1, 2, 0.5);
-    ctx.fillRect(hx+1.5, hy-1, 2, 0.5);
-  } else {
-    // Abiertos brillosos negros
-    ctx.fillStyle = '#1a1a1a';
-    ctx.beginPath();
-    ctx.arc(hx-2.5, hy-1, 1.4, 0, Math.PI*2);
-    ctx.arc(hx+2.5, hy-1, 1.4, 0, Math.PI*2);
-    ctx.fill();
-    // Brillito blanco
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    ctx.arc(hx-2.2, hy-1.5, 0.5, 0, Math.PI*2);
-    ctx.arc(hx+2.8, hy-1.5, 0.5, 0, Math.PI*2);
-    ctx.fill();
-  }
-
-  // ── Corona dorada de reina ──
-  ctx.fillStyle = '#ffd34d';
-  // Base de la corona
-  ctx.fillRect(hx-7, hy-9, 14, 2);
-  // Tres picos
-  ctx.beginPath();
-  ctx.moveTo(hx-7, hy-9);
-  ctx.lineTo(hx-5, hy-13);
-  ctx.lineTo(hx-3, hy-9);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.moveTo(hx-1, hy-9);
-  ctx.lineTo(hx, hy-14);
-  ctx.lineTo(hx+1, hy-9);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.moveTo(hx+3, hy-9);
-  ctx.lineTo(hx+5, hy-13);
-  ctx.lineTo(hx+7, hy-9);
-  ctx.fill();
-  // Joyas de la corona (rosa/cian)
-  ctx.fillStyle = '#ff80a0';
-  ctx.beginPath(); ctx.arc(hx-5, hy-12, 0.8, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#80d0ff';
-  ctx.beginPath(); ctx.arc(hx, hy-13, 0.8, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#ff80a0';
-  ctx.beginPath(); ctx.arc(hx+5, hy-12, 0.8, 0, Math.PI*2); ctx.fill();
-  // Brillo en la corona
-  ctx.fillStyle = '#fff8b0';
-  ctx.fillRect(hx-7, hy-9, 14, 0.5);
-
-  // ── Moño rosa (decoración entre las orejas) ──
-  ctx.fillStyle = '#ff80a0';
-  ctx.beginPath();
-  ctx.arc(hx-2.5, hy-7, 1.5, 0, Math.PI*2);
-  ctx.arc(hx+2.5, hy-7, 1.5, 0, Math.PI*2);
-  ctx.fill();
-  ctx.fillStyle = '#ffa0c0';
-  ctx.beginPath();
-  ctx.arc(hx, hy-7, 0.8, 0, Math.PI*2);
-  ctx.fill();
-
-  // ── Texto flotante "REINA LULU" cuando el jugador se acerca ──
-  const distToPlayer = Math.abs((P.x + P.w/2) - (q.x + q.w/2));
-  if(distToPlayer < 80){
-    const alpha = Math.max(0.4, 1 - distToPlayer/80);
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.fillStyle = '#ff80a0';
-    ctx.shadowColor = '#000';
-    ctx.shadowBlur = 4;
-    ctx.font = 'bold 11px system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('★ REINA LULU ★', x+q.w/2, y - 8);
-    ctx.shadowBlur = 0;
-    ctx.textAlign = 'left';
-    ctx.restore();
-  }
-}
-
 // ═══════════════════════════════════════════════════════════════
 //  RENDER — PRINCESAS (varían por mundo)
 //    Lulu  (M1): Bichón Maltés blanco
 //    Turna (M2): Bulldog Francés
 //    Bamby (M3): Salchicha entrada en años
 // ═══════════════════════════════════════════════════════════════
-function drawFrankie(){
-  if(!window._frankie) return;
-  const f = window._frankie;
+function drawPrincess(){
+  if(!window._princess) return;
+  const f = window._princess;
   const screenX = f.x - cam.x;
   if(screenX < -40 || screenX > CW + 40) return;
   f.bobT = (f.bobT || 0) + 0.06;
@@ -7894,8 +7694,7 @@ function render(){
 
   // artifacts (level 3 & 4 decorations)
   drawArtifacts();
-  drawQueenLulu();
-  drawFrankie();
+  drawPrincess();
 
   // items (bones / golden / life)
   for(const it of items){
@@ -8148,6 +7947,376 @@ function showGameOver(){
   };
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  PANTALLA DE FIN DE MUNDO — animación de rescate con la princesa
+//  Mundo 1 → Lulu (Bichón Maltés)
+//  Mundo 2 → Turna (Bulldog Francés)
+//  Mundo 3 → Bamby (Salchicha entrada en años, reina madre)
+// ═══════════════════════════════════════════════════════════════
+function showWorldComplete(worldFinished, onContinue){
+  loopGo = false;
+  paused = true;
+  stopMusic();
+  const princessName = worldFinished === 1 ? 'Lulu'
+                    : worldFinished === 2 ? 'Turna'
+                    : 'Bamby';
+  const princessDesc = worldFinished === 1 ? 'la Bichón Maltés de la pradera'
+                    : worldFinished === 2 ? 'la Bulldog Francés tétrica'
+                    : 'la Reina Madre del pantano';
+  const nextWorld = worldFinished + 1;
+  const nextLabel = nextWorld === 2 ? 'MUNDO 2 — TÉTRICO'
+                  : nextWorld === 3 ? 'MUNDO 3 — FRENÉTICO'
+                  : 'FIN';
+  const variant = worldFinished === 1 ? 'lulu' : worldFinished === 2 ? 'turna' : 'bamby';
+  const accentColor = variant === 'lulu' ? '#ff80a0'
+                    : variant === 'turna' ? '#c080ff'
+                    : '#ffd34d';
+  const msg = document.getElementById('msg');
+  msg.innerHTML = `
+    <div class="msg-card msg-card-win">
+      <h2 class="msg-title">★ ¡MUNDO ${worldFinished} COMPLETO! ★</h2>
+      <p class="msg-sub">Rescataste a <strong style="color:${accentColor}">${princessName}</strong>, ${princessDesc}</p>
+      <div style="display:flex;justify-content:center;margin:10px 0 6px 0;">
+        <canvas id="princess-final" width="200" height="140" style="background:linear-gradient(180deg,#1a2438,#08121c);border-radius:10px;box-shadow:0 4px 18px ${accentColor}66"></canvas>
+      </div>
+      <p class="msg-sub" style="font-size:13px;color:${accentColor};margin-top:0">
+        ${nextWorld <= 3 ? '★ Próximo: ' + nextLabel + ' ★' : ''}
+      </p>
+      <button class="action-btn" id="msg-btn">${nextWorld <= 3 ? 'AVANZAR' : 'CONTINUAR'}</button>
+    </div>
+  `;
+  msg.classList.remove('hidden');
+  setTimeout(()=>{ drawPrincessRescueScene(variant); }, 50);
+  document.getElementById('msg-btn').onclick = () => {
+    msg.classList.add('hidden');
+    paused = false;
+    onContinue();
+  };
+}
+
+// Renderiza la escena de rescate en el canvas de la pantalla intermedia.
+// Estilo: luna/estrellas/luciérnagas + sprite de la princesa + corazones.
+function drawPrincessRescueScene(variant){
+  const c = document.getElementById('princess-final');
+  if(!c) return;
+  const lctx = c.getContext('2d');
+  const W = c.width, H = c.height;
+  lctx.clearRect(0, 0, W, H);
+
+  // Fondo según mundo
+  if(variant === 'lulu'){
+    // Mundo 1: pradera al atardecer
+    const g = lctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#3a4a6a');
+    g.addColorStop(0.6, '#a06080');
+    g.addColorStop(1, '#3a8030');
+    lctx.fillStyle = g;
+    lctx.fillRect(0, 0, W, H);
+    // Sol
+    lctx.fillStyle = 'rgba(255,210,120,0.85)';
+    lctx.beginPath(); lctx.arc(W*0.78, H*0.25, 16, 0, Math.PI*2); lctx.fill();
+    lctx.fillStyle = 'rgba(255,210,120,0.25)';
+    lctx.beginPath(); lctx.arc(W*0.78, H*0.25, 26, 0, Math.PI*2); lctx.fill();
+    // Pasto
+    lctx.fillStyle = '#2c6020';
+    lctx.fillRect(0, H*0.85, W, H*0.15);
+  } else if(variant === 'turna'){
+    // Mundo 2 tétrico: noche violeta
+    const g = lctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#1a0a2e');
+    g.addColorStop(1, '#3a1a4a');
+    lctx.fillStyle = g;
+    lctx.fillRect(0, 0, W, H);
+    // Luna llena pálida
+    lctx.fillStyle = 'rgba(220,200,255,0.85)';
+    lctx.beginPath(); lctx.arc(W*0.82, H*0.2, 15, 0, Math.PI*2); lctx.fill();
+    lctx.fillStyle = 'rgba(220,200,255,0.2)';
+    lctx.beginPath(); lctx.arc(W*0.82, H*0.2, 25, 0, Math.PI*2); lctx.fill();
+    // Niebla
+    lctx.fillStyle = 'rgba(160,120,200,0.18)';
+    lctx.fillRect(0, H*0.65, W, H*0.35);
+  } else {
+    // Mundo 3 frenético: aurora épica
+    const g = lctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#0a2030');
+    g.addColorStop(0.5, '#1a4a60');
+    g.addColorStop(1, '#0a3a30');
+    lctx.fillStyle = g;
+    lctx.fillRect(0, 0, W, H);
+    // Aurora boreal cian
+    lctx.globalAlpha = 0.5;
+    lctx.fillStyle = '#40ffc0';
+    for(let i=0;i<3;i++){
+      lctx.beginPath();
+      lctx.ellipse(W*0.5, H*0.2 + i*8, W*0.4, 12, 0, 0, Math.PI*2);
+      lctx.fill();
+    }
+    lctx.globalAlpha = 1;
+  }
+
+  // Estrellas chiquitas
+  lctx.fillStyle = 'rgba(255,255,255,0.7)';
+  for(let i=0;i<20;i++){
+    const sx = (i*23 + 11) % W;
+    const sy = (i*17 + 9) % (H*0.55);
+    lctx.fillRect(sx, sy, 1, 1);
+  }
+
+  // ── PRINCESA al centro ──
+  const cx = W/2, cy = H*0.65;
+  const SC = 2.2;   // escala grande
+  lctx.save();
+  lctx.translate(cx, cy);
+  lctx.scale(SC, SC);
+  // Sombra
+  lctx.fillStyle = 'rgba(0,0,0,0.4)';
+  lctx.beginPath();
+  lctx.ellipse(0, 12, 14, 2.5, 0, 0, Math.PI*2);
+  lctx.fill();
+
+  if(variant === 'lulu') drawLuluPortrait(lctx);
+  else if(variant === 'turna') drawTurnaPortrait(lctx);
+  else drawBambyPortrait(lctx);
+  lctx.restore();
+
+  // Corazones flotando
+  const heartColor = variant === 'lulu' ? '#ff80a0'
+                   : variant === 'turna' ? '#c080ff'
+                   : '#ffd34d';
+  lctx.fillStyle = heartColor;
+  const hearts = [
+    [W*0.15, H*0.3, 6], [W*0.85, H*0.35, 5],
+    [W*0.1, H*0.55, 5], [W*0.9, H*0.6, 5],
+    [W*0.22, H*0.18, 4], [W*0.78, H*0.18, 4]
+  ];
+  for(const [hx, hy, hs] of hearts){
+    lctx.beginPath();
+    lctx.arc(hx-hs*0.4, hy, hs*0.5, 0, Math.PI*2);
+    lctx.arc(hx+hs*0.4, hy, hs*0.5, 0, Math.PI*2);
+    lctx.fill();
+    lctx.beginPath();
+    lctx.moveTo(hx-hs*0.8, hy);
+    lctx.lineTo(hx, hy+hs);
+    lctx.lineTo(hx+hs*0.8, hy);
+    lctx.fill();
+  }
+}
+
+// Sprite grande de Lulu (Bichón Maltés blanco)
+function drawLuluPortrait(g){
+  // Cuerpo blanco esponjoso
+  g.fillStyle = '#fff8f4';
+  g.beginPath();
+  g.ellipse(0, 4, 16, 10, 0, 0, Math.PI*2);
+  g.fill();
+  // Pelitos esponjosos
+  g.fillStyle = '#f0e8e4';
+  for(let i=0;i<7;i++){
+    g.beginPath();
+    g.arc(-13 + i*4, 0, 2.5, 0, Math.PI*2);
+    g.fill();
+  }
+  // Cabeza
+  g.fillStyle = '#fff8f4';
+  g.beginPath();
+  g.arc(8, -6, 8, 0, Math.PI*2);
+  g.fill();
+  // Orejas caídas peludas
+  g.fillStyle = '#f0e8e4';
+  g.beginPath();
+  g.ellipse(2, -4, 3.5, 7, -0.3, 0, Math.PI*2);
+  g.ellipse(14, -4, 3.5, 7, 0.3, 0, Math.PI*2);
+  g.fill();
+  // Hocico
+  g.fillStyle = '#f0d8d0';
+  g.beginPath();
+  g.ellipse(11, -3, 3, 2.5, 0, 0, Math.PI*2);
+  g.fill();
+  // Nariz
+  g.fillStyle = '#1a1a1a';
+  g.beginPath();
+  g.arc(13, -4, 1.5, 0, Math.PI*2);
+  g.fill();
+  // Ojos
+  g.fillStyle = '#000';
+  g.beginPath();
+  g.arc(4, -7, 1.5, 0, Math.PI*2);
+  g.arc(10, -7, 1.5, 0, Math.PI*2);
+  g.fill();
+  g.fillStyle = '#fff';
+  g.fillRect(3.5, -7.5, 0.6, 0.6);
+  g.fillRect(9.5, -7.5, 0.6, 0.6);
+  // Moño rosa con joya
+  g.fillStyle = '#ff5599';
+  g.beginPath();
+  g.ellipse(4, -13, 3, 2.5, -0.3, 0, Math.PI*2);
+  g.ellipse(10, -13, 3, 2.5, 0.3, 0, Math.PI*2);
+  g.fill();
+  g.fillStyle = '#cc3377';
+  g.beginPath();
+  g.arc(7, -13, 1.5, 0, Math.PI*2);
+  g.fill();
+}
+
+// Sprite grande de Turna (Bulldog Francés)
+function drawTurnaPortrait(g){
+  // Cuerpo compacto gris
+  g.fillStyle = '#c8c8c8';
+  g.beginPath();
+  g.roundRect(-14, 0, 28, 12, 5);
+  g.fill();
+  // Panza
+  g.fillStyle = '#f0f0f0';
+  g.fillRect(-12, 6, 24, 6);
+  // Manchas oscuras del bulldog
+  g.fillStyle = '#5a5a5a';
+  g.beginPath(); g.arc(-8, 4, 2.5, 0, Math.PI*2); g.fill();
+  g.beginPath(); g.arc(9, 3, 3, 0, Math.PI*2); g.fill();
+  // Cabeza grande cuadrada
+  g.fillStyle = '#c8c8c8';
+  g.beginPath();
+  g.roundRect(-8, -14, 16, 14, 4);
+  g.fill();
+  // Mancha en la cara
+  g.fillStyle = '#5a5a5a';
+  g.fillRect(-5, -12, 5, 7);
+  // Orejas paradas
+  g.fillStyle = '#a8a8a8';
+  g.beginPath();
+  g.moveTo(-7, -10); g.lineTo(-5, -18); g.lineTo(-2, -10); g.fill();
+  g.beginPath();
+  g.moveTo(2, -10); g.lineTo(5, -18); g.lineTo(7, -10); g.fill();
+  // Interior orejas rosa
+  g.fillStyle = '#ff90b0';
+  g.beginPath();
+  g.moveTo(-6, -10); g.lineTo(-5, -15); g.lineTo(-3, -10); g.fill();
+  g.beginPath();
+  g.moveTo(3, -10); g.lineTo(5, -15); g.lineTo(6, -10); g.fill();
+  // Hocico chato
+  g.fillStyle = '#a0a0a0';
+  g.beginPath();
+  g.roundRect(-5, -6, 10, 6, 2);
+  g.fill();
+  // Arrugas
+  g.strokeStyle = 'rgba(60,60,60,0.6)';
+  g.lineWidth = 0.7;
+  g.beginPath();
+  g.moveTo(-4, -4); g.lineTo(4, -4);
+  g.moveTo(-4, -2); g.lineTo(4, -2);
+  g.stroke();
+  // Nariz negra grande
+  g.fillStyle = '#1a1a1a';
+  g.beginPath();
+  g.roundRect(-2, -7, 4, 3, 1);
+  g.fill();
+  // Ojos grandes
+  g.fillStyle = '#fff';
+  g.beginPath();
+  g.arc(-5, -8, 2, 0, Math.PI*2);
+  g.arc(5, -8, 2, 0, Math.PI*2);
+  g.fill();
+  g.fillStyle = '#1a1a1a';
+  g.beginPath();
+  g.arc(-5, -7.5, 1.3, 0, Math.PI*2);
+  g.arc(5, -7.5, 1.3, 0, Math.PI*2);
+  g.fill();
+  g.fillStyle = '#fff';
+  g.fillRect(-5.5, -8.5, 0.6, 0.6);
+  g.fillRect(4.5, -8.5, 0.6, 0.6);
+  // Tiara violeta
+  g.fillStyle = '#c060ff';
+  g.beginPath();
+  g.moveTo(-7, -14); g.lineTo(-5, -19); g.lineTo(-2, -15);
+  g.lineTo(0, -20); g.lineTo(2, -15); g.lineTo(5, -19);
+  g.lineTo(7, -14); g.closePath();
+  g.fill();
+  g.fillStyle = '#fff';
+  g.fillRect(-0.7, -18, 1.5, 1.5);
+}
+
+// Sprite grande de Bamby (salchicha entrada en años)
+function drawBambyPortrait(g){
+  // Cuerpo largo (avellana)
+  g.fillStyle = '#a8704a';
+  g.beginPath();
+  g.roundRect(-16, 0, 30, 12, 5);
+  g.fill();
+  // Panza con canas
+  g.fillStyle = '#d8c0a0';
+  g.fillRect(-14, 5, 26, 7);
+  // Manchas canas
+  g.fillStyle = '#e0d8c8';
+  g.beginPath(); g.arc(-10, 2, 1.5, 0, Math.PI*2); g.fill();
+  g.beginPath(); g.arc(-3, 4, 1.4, 0, Math.PI*2); g.fill();
+  g.beginPath(); g.arc(6, 2, 1.4, 0, Math.PI*2); g.fill();
+  // Patitas
+  g.fillStyle = '#7a4818';
+  g.fillRect(-11, 12, 3, 4);
+  g.fillRect(10, 12, 3, 4);
+  // Cabeza
+  g.fillStyle = '#a8704a';
+  g.beginPath();
+  g.roundRect(6, -10, 14, 13, 5);
+  g.fill();
+  // Hocico
+  g.fillStyle = '#7a4818';
+  g.beginPath();
+  g.roundRect(14, -4, 8, 6, 2);
+  g.fill();
+  // Nariz
+  g.fillStyle = '#1a1a1a';
+  g.beginPath();
+  g.arc(20, -2, 1.5, 0, Math.PI*2);
+  g.fill();
+  // Oreja caída con canas
+  g.fillStyle = '#8a5828';
+  g.beginPath();
+  g.ellipse(8, -7, 3, 7, -0.3, 0, Math.PI*2);
+  g.fill();
+  g.fillStyle = '#d8c0a0';
+  g.fillRect(7, -10, 1, 2.5);
+  // LENTES redondos
+  g.strokeStyle = '#1a1a1a';
+  g.lineWidth = 1.1;
+  g.beginPath();
+  g.arc(10, -5, 2.6, 0, Math.PI*2);
+  g.arc(16.5, -5, 2.6, 0, Math.PI*2);
+  g.stroke();
+  // Puente
+  g.beginPath();
+  g.moveTo(12.6, -5); g.lineTo(13.9, -5);
+  g.stroke();
+  // Reflejos
+  g.fillStyle = 'rgba(180,220,255,0.5)';
+  g.fillRect(9.3, -6.2, 1.4, 1);
+  g.fillRect(15.8, -6.2, 1.4, 1);
+  // Ojos
+  g.fillStyle = '#1a1a1a';
+  g.beginPath();
+  g.arc(10, -5, 1, 0, Math.PI*2);
+  g.arc(16.5, -5, 1, 0, Math.PI*2);
+  g.fill();
+  // Sonrisa amable
+  g.strokeStyle = '#5a2818';
+  g.lineWidth = 0.8;
+  g.beginPath();
+  g.arc(17, 1, 1.6, 0, Math.PI);
+  g.stroke();
+  // Corona dorada de reina madre
+  g.fillStyle = '#ffd34d';
+  g.beginPath();
+  g.moveTo(6, -10); g.lineTo(8, -16); g.lineTo(11, -12);
+  g.lineTo(13, -17); g.lineTo(15, -12); g.lineTo(18, -16);
+  g.lineTo(20, -10); g.closePath();
+  g.fill();
+  g.fillStyle = '#c89010';
+  g.fillRect(6, -10, 14, 1.5);
+  // Joyas
+  g.fillStyle = '#ff2080'; g.fillRect(7, -14, 1.5, 1.5);
+  g.fillStyle = '#40e0ff'; g.fillRect(12.3, -15, 1.5, 1.5);
+  g.fillStyle = '#40ff60'; g.fillRect(18, -14, 1.5, 1.5);
+}
+
 function showFinalVictory(){
   loopGo = false;
   stopMusic();
@@ -8157,13 +8326,12 @@ function showFinalVictory(){
   msg.innerHTML = `
     <div class="msg-card msg-card-win">
       <h2 class="msg-title">★ ¡VICTORIA TOTAL! ★</h2>
-      <p class="msg-sub">¡Rescataste a Frankie, la salchicha hembra!</p>
-      <div id="lulu-canvas-wrap" style="display:flex;justify-content:center;margin:8px 0 4px 0;">
-        <canvas id="lulu-final" width="160" height="120" style="background:linear-gradient(180deg,#1a2a3a,#08121c);border-radius:10px;box-shadow:0 4px 18px rgba(255,180,220,0.4)"></canvas>
+      <p class="msg-sub">Rescataste a las tres princesas: <strong style="color:#ff80a0">Lulu</strong>, <strong style="color:#c080ff">Turna</strong> y la <strong style="color:#ffd34d">Reina Bamby</strong></p>
+      <div style="display:flex;justify-content:center;gap:8px;margin:10px 0 6px 0;">
+        <canvas id="trio-final" width="260" height="130" style="background:linear-gradient(180deg,#1a2438,#08121c);border-radius:10px;box-shadow:0 4px 18px rgba(255,180,220,0.4)"></canvas>
       </div>
-      <p class="msg-sub" style="font-size:13px;color:#ffb0d0;margin-top:0">
-        La salchicha más dulce del pantano nocturno<br>
-        está a salvo gracias a <strong style="color:#ffd34d">${heroName}</strong>
+      <p class="msg-sub" style="font-size:13px;color:#ffd34d;margin-top:0">
+        El reino canino está a salvo gracias a <strong style="color:#ffd34d">${heroName}</strong>
       </p>
       <div class="msg-stats">
         <div class="stat-row"><span>Huesitos totales:</span> <strong>${totalBones}</strong></div>
@@ -8175,9 +8343,9 @@ function showFinalVictory(){
     </div>
   `;
   msg.classList.remove('hidden');
-  // Render salchicha hembra rescatada en su canvas
+  // Render del trío de princesas rescatadas
   setTimeout(()=>{
-    drawFrankieFinal();
+    drawTrioFinal();
   }, 50);
   document.getElementById('msg-btn').onclick = () => {
     msg.classList.add('hidden');
@@ -8185,198 +8353,86 @@ function showFinalVictory(){
   };
 }
 
-// Renderiza a Frankie (salchicha hembra) en la pantalla final, con corazoncitos
-function drawFrankieFinal(){
-  const c = document.getElementById('lulu-final');
+// Renderiza las 3 princesas rescatadas lado a lado para el final
+function drawTrioFinal(){
+  const c = document.getElementById('trio-final');
   if(!c) return;
   const lctx = c.getContext('2d');
   const W = c.width, H = c.height;
   lctx.clearRect(0, 0, W, H);
-  // Fondo: pantano nocturno - luna y luciérnagas
-  // Luna
-  lctx.fillStyle = 'rgba(255,250,210,0.9)';
-  lctx.beginPath();
-  lctx.arc(W*0.82, H*0.22, 14, 0, Math.PI*2);
-  lctx.fill();
-  lctx.fillStyle = 'rgba(255,250,210,0.25)';
-  lctx.beginPath();
-  lctx.arc(W*0.82, H*0.22, 22, 0, Math.PI*2);
-  lctx.fill();
-  // Estrellas chiquitas
+
+  // Fondo: aurora épica de cierre
+  const g = lctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#1a1438');
+  g.addColorStop(0.5, '#3a2068');
+  g.addColorStop(1, '#1a3038');
+  lctx.fillStyle = g;
+  lctx.fillRect(0, 0, W, H);
+
+  // Estrellas y brillos
   lctx.fillStyle = 'rgba(255,255,255,0.7)';
-  for(let i=0;i<18;i++){
+  for(let i=0;i<24;i++){
     const sx = (i*23 + 11) % W;
-    const sy = (i*17 + 9) % (H*0.5);
+    const sy = (i*17 + 9) % H;
     lctx.fillRect(sx, sy, 1, 1);
   }
-  // Luciérnagas verdes
-  lctx.fillStyle = 'rgba(160,255,140,0.85)';
-  const fires = [[W*0.18, H*0.4],[W*0.3, H*0.65],[W*0.7, H*0.55],[W*0.55, H*0.78]];
-  for(const [fx,fy] of fires){
-    lctx.beginPath(); lctx.arc(fx, fy, 1.5, 0, Math.PI*2); lctx.fill();
-    lctx.fillStyle = 'rgba(160,255,140,0.25)';
-    lctx.beginPath(); lctx.arc(fx, fy, 4, 0, Math.PI*2); lctx.fill();
-    lctx.fillStyle = 'rgba(160,255,140,0.85)';
-  }
 
-  // Frankie en el centro, escalada (salchicha hembra rosa-marrón con moño)
-  const cx = W/2, cy = H*0.6;
-  const SC = 1.7;
-  lctx.save();
-  lctx.translate(cx, cy);
-  lctx.scale(SC, SC);
-
-  // Sombra
-  lctx.fillStyle = 'rgba(0,0,0,0.3)';
+  // Luna
+  lctx.fillStyle = 'rgba(255,250,210,0.85)';
   lctx.beginPath();
-  lctx.ellipse(0, 14, 22, 2.5, 0, 0, Math.PI*2);
+  lctx.arc(W*0.85, H*0.2, 14, 0, Math.PI*2);
+  lctx.fill();
+  lctx.fillStyle = 'rgba(255,250,210,0.2)';
+  lctx.beginPath();
+  lctx.arc(W*0.85, H*0.2, 22, 0, Math.PI*2);
   lctx.fill();
 
-  // Cuerpo (largo de salchicha) - rosa caramelo/marrón claro
-  lctx.fillStyle = '#d4805a';
-  lctx.beginPath();
-  lctx.roundRect(-22, 2, 44, 12, 5);
-  lctx.fill();
-  // Panza más clara
-  lctx.fillStyle = '#f0b890';
-  lctx.beginPath();
-  lctx.roundRect(-22, 4, 44, 5, 3);
-  lctx.fill();
-
-  // Patitas
-  lctx.fillStyle = '#a86038';
-  lctx.fillRect(-16, 14, 4, 6);
-  lctx.fillRect(12, 14, 4, 6);
-  // Detalles pinta de uñas
-  lctx.fillStyle = '#ff80a0';
-  lctx.fillRect(-15.5, 19, 3, 1);
-  lctx.fillRect(12.5, 19, 3, 1);
-
-  // Cabeza (a la derecha como en el sprite del jugador, pero la giramos al frente)
-  lctx.fillStyle = '#d4805a';
-  lctx.beginPath();
-  lctx.roundRect(12, -8, 16, 13, 5);
-  lctx.fill();
-  // Hocico
-  lctx.fillStyle = '#a86038';
-  lctx.beginPath();
-  lctx.roundRect(24, -2, 8, 6, 2);
-  lctx.fill();
-  // Nariz
-  lctx.fillStyle = '#1a1a1a';
-  lctx.beginPath();
-  lctx.arc(31, 0, 1.6, 0, Math.PI*2);
-  lctx.fill();
-  // Brillito en la nariz
-  lctx.fillStyle = '#fff';
-  lctx.beginPath();
-  lctx.arc(30.6, -0.4, 0.5, 0, Math.PI*2);
-  lctx.fill();
-
-  // Ojos con pestañas largas (toque femenino)
-  lctx.fillStyle = '#fff';
-  lctx.beginPath();
-  lctx.arc(20, -3, 2.5, 0, Math.PI*2);
-  lctx.fill();
-  lctx.fillStyle = '#1a1a1a';
-  lctx.beginPath();
-  lctx.arc(20.5, -3, 1.5, 0, Math.PI*2);
-  lctx.fill();
-  lctx.fillStyle = '#fff';
-  lctx.beginPath();
-  lctx.arc(20.2, -3.4, 0.6, 0, Math.PI*2);
-  lctx.fill();
-  // Pestañas
-  lctx.strokeStyle = '#1a1a1a';
-  lctx.lineWidth = 0.8;
-  lctx.beginPath();
-  lctx.moveTo(17.5, -5.5); lctx.lineTo(16.5, -7);
-  lctx.moveTo(19, -6); lctx.lineTo(18.5, -8);
-  lctx.moveTo(21, -6); lctx.lineTo(21, -8);
-  lctx.stroke();
-  // Cachetes rosaditos
-  lctx.fillStyle = 'rgba(255,150,170,0.6)';
-  lctx.beginPath();
-  lctx.arc(18, 1, 2.5, 0, Math.PI*2);
-  lctx.fill();
-
-  // Oreja caída larga
-  lctx.fillStyle = '#a86038';
-  lctx.beginPath();
-  lctx.ellipse(15, -3, 4, 8, -0.3, 0, Math.PI*2);
-  lctx.fill();
-
-  // Cola levantada feliz
-  lctx.fillStyle = '#d4805a';
-  lctx.save();
-  lctx.translate(-22, 4);
-  lctx.rotate(-0.6);
-  lctx.fillRect(-2, -8, 4, 10);
-  lctx.restore();
-
-  // ✨ MOÑO ROSA grande en la cabeza ✨
-  lctx.fillStyle = '#ff5599';
-  lctx.beginPath();
-  lctx.ellipse(15, -10, 4, 3, -0.3, 0, Math.PI*2);
-  lctx.ellipse(21, -10, 4, 3, 0.3, 0, Math.PI*2);
-  lctx.fill();
-  // Centro del moño
-  lctx.fillStyle = '#cc3377';
-  lctx.beginPath();
-  lctx.arc(18, -10, 1.5, 0, Math.PI*2);
-  lctx.fill();
-  // Brillo del moño
-  lctx.fillStyle = '#ffaacc';
-  lctx.beginPath();
-  lctx.ellipse(14, -10.5, 1.5, 0.8, -0.3, 0, Math.PI*2);
-  lctx.fill();
-
-  // Collar con corazón
-  lctx.strokeStyle = '#ff5599';
-  lctx.lineWidth = 1.5;
-  lctx.beginPath();
-  lctx.arc(18, 5, 6, 0.5, Math.PI - 0.5);
-  lctx.stroke();
-  // Medallón corazón
-  lctx.fillStyle = '#ff5599';
-  lctx.beginPath();
-  lctx.arc(17, 9, 1.2, 0, Math.PI*2);
-  lctx.arc(19, 9, 1.2, 0, Math.PI*2);
-  lctx.fill();
-  lctx.beginPath();
-  lctx.moveTo(15.8, 9.5);
-  lctx.lineTo(18, 12.5);
-  lctx.lineTo(20.2, 9.5);
-  lctx.fill();
-
-  lctx.restore();
-
-  // Corazoncitos flotando alrededor (más cantidad, romántico)
-  lctx.fillStyle = '#ff80a0';
-  const hearts = [
-    [W*0.15, H*0.25, 7],
-    [W*0.85, H*0.32, 6],
-    [W*0.1, H*0.5, 5],
-    [W*0.9, H*0.55, 6],
-    [W*0.2, H*0.75, 5],
-    [W*0.8, H*0.78, 6]
+  // Las 3 princesas a escala menor, en fila
+  const positions = [
+    { variant: 'lulu',  x: W*0.22, color: '#ff80a0' },
+    { variant: 'turna', x: W*0.5,  color: '#c080ff' },
+    { variant: 'bamby', x: W*0.78, color: '#ffd34d' }
   ];
-  for(const [hx,hy,sz] of hearts){
+  const SC = 1.3;
+  const baseY = H*0.7;
+
+  for(const p of positions){
     lctx.save();
-    lctx.translate(hx, hy);
+    lctx.translate(p.x, baseY);
+    lctx.scale(SC, SC);
+    // Sombra
+    lctx.fillStyle = 'rgba(0,0,0,0.4)';
     lctx.beginPath();
-    lctx.arc(-sz/3, -sz/4, sz/2.5, 0, Math.PI*2);
-    lctx.arc(sz/3, -sz/4, sz/2.5, 0, Math.PI*2);
+    lctx.ellipse(0, 12, 14, 2.5, 0, 0, Math.PI*2);
     lctx.fill();
-    lctx.beginPath();
-    lctx.moveTo(-sz/1.5, 0);
-    lctx.lineTo(0, sz);
-    lctx.lineTo(sz/1.5, 0);
-    lctx.fill();
+    if(p.variant === 'lulu') drawLuluPortrait(lctx);
+    else if(p.variant === 'turna') drawTurnaPortrait(lctx);
+    else drawBambyPortrait(lctx);
     lctx.restore();
   }
-}
 
+  // Corazones flotando en colores variados
+  const heartGroups = [
+    { col:'#ff80a0', pos:[[W*0.05, H*0.4], [W*0.15, H*0.18]] },
+    { col:'#c080ff', pos:[[W*0.42, H*0.18], [W*0.55, H*0.32]] },
+    { col:'#ffd34d', pos:[[W*0.95, H*0.45], [W*0.88, H*0.7]] },
+  ];
+  for(const grp of heartGroups){
+    lctx.fillStyle = grp.col;
+    for(const [hx, hy] of grp.pos){
+      const hs = 5;
+      lctx.beginPath();
+      lctx.arc(hx-hs*0.4, hy, hs*0.5, 0, Math.PI*2);
+      lctx.arc(hx+hs*0.4, hy, hs*0.5, 0, Math.PI*2);
+      lctx.fill();
+      lctx.beginPath();
+      lctx.moveTo(hx-hs*0.8, hy);
+      lctx.lineTo(hx, hy+hs);
+      lctx.lineTo(hx+hs*0.8, hy);
+      lctx.fill();
+    }
+  }
+}
 // =================== CHARACTER PREVIEW ===================
 function drawCharPreview(canvasId, charType){
   const c = document.getElementById(canvasId);
