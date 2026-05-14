@@ -65,6 +65,66 @@ canvas{
   -ms-interpolation-mode:bicubic;
 }
 
+/* ═══════════ CONTROLES TÁCTILES (móvil/touch) ═══════════ */
+#touchControls{
+  position:fixed; left:0; right:0; bottom:0;
+  display:none;             /* solo se muestra cuando isTouchDevice() */
+  pointer-events:none;      /* permitir clicks sobre el canvas en zonas vacías */
+  z-index:50;
+  padding:0 14px 24px 14px;
+  user-select:none;
+  -webkit-user-select:none;
+  -webkit-touch-callout:none;
+  touch-action:none;
+}
+#touchControls.visible{ display:flex; justify-content:space-between; align-items:flex-end; }
+.tc-side{
+  pointer-events:auto;
+  display:grid;
+  gap:6px;
+}
+/* D-pad: 3 columnas, 2 filas (arriba en fila 1 centro; abajo en fila 2 con izq/centro/der) */
+.tc-dpad{
+  grid-template-columns: 56px 56px 56px;
+  grid-template-rows: 56px 56px;
+  grid-template-areas:
+    ".  up  ."
+    "left down right";
+}
+.tc-dpad .tc-btn[data-key="up"]{ grid-area: up; }
+.tc-dpad .tc-btn[data-key="left"]{ grid-area: left; }
+.tc-dpad .tc-btn[data-key="down"]{ grid-area: down; }
+.tc-dpad .tc-btn[data-key="right"]{ grid-area: right; }
+/* Botones acción derecha */
+.tc-actions{
+  grid-template-columns: 60px 60px;
+  grid-template-rows: 60px 60px;
+  grid-template-areas:
+    ".      shoot"
+    "jump   .";
+  gap:10px;
+}
+.tc-actions .tc-btn[data-key="jump"]{ grid-area: jump; background:rgba(120,220,140,0.18); border-color:rgba(120,220,140,0.6); }
+.tc-actions .tc-btn[data-key="shoot"]{ grid-area: shoot; background:rgba(255,180,80,0.18); border-color:rgba(255,180,80,0.7); }
+.tc-btn{
+  background:rgba(255,255,255,0.08);
+  border:2px solid rgba(255,255,255,0.35);
+  border-radius:50%;
+  color:#fff;
+  font-weight:800;
+  font-size:22px;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 2px 8px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.18);
+  -webkit-tap-highlight-color:transparent;
+  transition: transform 0.08s, background 0.08s;
+}
+.tc-btn:active, .tc-btn.pressed{
+  transform: scale(0.92);
+  background:rgba(255,255,255,0.30);
+}
+.tc-actions .tc-btn[data-key="jump"].pressed{ background:rgba(120,220,140,0.5); }
+.tc-actions .tc-btn[data-key="shoot"].pressed{ background:rgba(255,180,80,0.55); }
+
 /* ════════════ Pantalla de overlay (menús, mensajes) ════════════ */
 .overlay{
   position:fixed;inset:0;
@@ -256,6 +316,22 @@ button.action-btn.secondary{
   <canvas id="c"></canvas>
 </div>
 
+<!-- ═══════════ Controles táctiles overlay (móvil) ═══════════ -->
+<div id="touchControls">
+  <!-- D-pad izquierda -->
+  <div class="tc-side tc-dpad" id="tc-dpad">
+    <div class="tc-btn" data-key="up">▲</div>
+    <div class="tc-btn" data-key="left">◀</div>
+    <div class="tc-btn" data-key="down">▼</div>
+    <div class="tc-btn" data-key="right">▶</div>
+  </div>
+  <!-- Acciones derecha -->
+  <div class="tc-side tc-actions">
+    <div class="tc-btn" data-key="jump">↑</div>
+    <div class="tc-btn" data-key="shoot">●</div>
+  </div>
+</div>
+
 <!-- ═══════════ Menú principal ═══════════ -->
 <div id="msg-main" class="overlay">
   <h1>★ SUPER DACHSHUND BROS ★</h1>
@@ -335,7 +411,7 @@ window.addEventListener('orientationchange', resizeCanvas);
 // ═══════════════════════════════════════════════════════════════
 //  INPUT — teclado + táctil
 // ═══════════════════════════════════════════════════════════════
-const K = {left:false, right:false, jump:false, shoot:false, down:false};
+const K = {left:false, right:false, jump:false, shoot:false, down:false, up:false};
 let jumpTap = false, shootTap = false, paused = false;
 let downTap = false;  // tap único de bajar para entrar/salir al subnivel
 
@@ -368,15 +444,97 @@ document.addEventListener('keyup', e => {
   if(e.code==='KeyX') K.shoot=false;
 });
 
-// Touch — botón disparar dibujado en canvas
-canvas.addEventListener('click', e=>{
-  if(P && !P.dead && !paused){
-    const rect=canvas.getBoundingClientRect();
-    const cx=(e.clientX-rect.left)*(CW/rect.width);
-    const cy=(e.clientY-rect.top)*(CH/rect.height);
-    if(shots>0 && cx>CW-64 && cy>CH-44) shootTap=true;
+// ═══════════════════════════════════════════════════════════════
+//  CONTROLES TÁCTILES — D-pad + acciones (solo móvil/touch)
+// ═══════════════════════════════════════════════════════════════
+function isTouchDevice(){
+  return ('ontouchstart' in window) ||
+         (navigator.maxTouchPoints && navigator.maxTouchPoints > 0) ||
+         (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+}
+(function setupTouchControls(){
+  const tc = document.getElementById('touchControls');
+  if(!tc) return;
+  if(!isTouchDevice()) return;
+  tc.classList.add('visible');
+  // Actualizar el tip del HUD para que no diga teclas si es táctil
+  const extra = document.getElementById('h-extra');
+  if(extra) extra.textContent = '';
+
+  // Mapear cada botón a una "tecla"
+  const buttons = tc.querySelectorAll('.tc-btn');
+  buttons.forEach(btn => {
+    const key = btn.dataset.key;
+    const onPress = (ev)=>{
+      ev.preventDefault();
+      btn.classList.add('pressed');
+      handleTouchKey(key, true);
+    };
+    const onRelease = (ev)=>{
+      ev.preventDefault();
+      btn.classList.remove('pressed');
+      handleTouchKey(key, false);
+    };
+    btn.addEventListener('touchstart', onPress, {passive:false});
+    btn.addEventListener('touchend', onRelease, {passive:false});
+    btn.addEventListener('touchcancel', onRelease, {passive:false});
+    // Soporte mouse para testing en escritorio
+    btn.addEventListener('mousedown', onPress);
+    btn.addEventListener('mouseup', onRelease);
+    btn.addEventListener('mouseleave', onRelease);
+    // Prevenir gestos de menu contextual
+    btn.addEventListener('contextmenu', e => e.preventDefault());
+  });
+
+  // Touch slide entre botones (deslizar dedo de un botón a otro)
+  // Implementación simple: un toque que se mueve fuera del botón lo suelta.
+  tc.addEventListener('touchmove', (ev)=>{
+    ev.preventDefault();
+    // Para cada toque activo, ver qué botón cubre y marcarlo como pressed
+    const touches = ev.touches;
+    const allBtns = Array.from(tc.querySelectorAll('.tc-btn'));
+    const currentlyPressed = new Set();
+    for(let i = 0; i < touches.length; i++){
+      const t = touches[i];
+      const el = document.elementFromPoint(t.clientX, t.clientY);
+      if(el && el.classList && el.classList.contains('tc-btn')){
+        currentlyPressed.add(el.dataset.key);
+      }
+    }
+    allBtns.forEach(b => {
+      const k = b.dataset.key;
+      const wasPressed = b.classList.contains('pressed');
+      const shouldBePressed = currentlyPressed.has(k);
+      if(shouldBePressed && !wasPressed){
+        b.classList.add('pressed');
+        handleTouchKey(k, true);
+      } else if(!shouldBePressed && wasPressed){
+        b.classList.remove('pressed');
+        handleTouchKey(k, false);
+      }
+    });
+  }, {passive:false});
+})();
+
+function handleTouchKey(key, isDown){
+  switch(key){
+    case 'left':  K.left = isDown; break;
+    case 'right': K.right = isDown; break;
+    case 'up':    if(isDown && !K.up) jumpTap = true; K.up = isDown; K.jump = isDown; break;
+    case 'down':
+      if(isDown && !K.down) downTap = true;
+      K.down = isDown;
+      break;
+    case 'jump':
+      if(isDown && !K.jump) jumpTap = true;
+      K.jump = isDown;
+      break;
+    case 'shoot':
+      if(isDown && !K.shoot) shootTap = true;
+      K.shoot = isDown;
+      break;
   }
-}, {passive:true});
+}
 
 // ═══════════════════════════════════════════════════════════════
 //  FÍSICA & CONSTANTES
@@ -1012,6 +1170,7 @@ function initLevel(lvl){
   paused = false;
   levelTransitioning = false;
   playerBullets = [];
+  window._bossProjectiles = [];
   introT = 0;          // resetear cartel de intro
   powerUpT = 0;        // resetear power-up al cambiar de nivel
   // Las municiones se conservan al perder vida y al pasar nivel.
@@ -1072,6 +1231,9 @@ function hud(){
   const ammoEl = document.getElementById('h-ammo');
   ammoEl.style.display = shots>0 ? 'inline-flex' : 'none';
   document.getElementById('h-shots').textContent = shots;
+  // Ocultar botón táctil de disparo si no hay munición
+  const shootBtn = document.querySelector('#touchControls .tc-btn[data-key="shoot"]');
+  if(shootBtn) shootBtn.style.visibility = shots > 0 ? 'visible' : 'hidden';
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2884,6 +3046,16 @@ function updateBoss(){
   boss.bobPhase = (boss.bobPhase||0) + 0.06;
   if(boss.roarT > 0) boss.roarT--;
 
+  // Inicializar state machine si no está
+  if(!boss.aiState){
+    boss.aiState = 'chase';
+    boss.aiTimer = 0;
+    boss.dashCooldown = 90;
+    boss.pounceCooldown = 180;
+    boss.slamCooldown = 240;
+    boss.fireCooldown = 200;
+  }
+
   // Carpincho madre (nivel 5) — escalado diferente
   if(level === 5){
     updateBoss5();
@@ -2893,49 +3065,205 @@ function updateBoss(){
   const arenaL = 168*TILE;
   const arenaR = 192*TILE - boss.w;
 
-  // Velocidad base — escala con mundo y enojo. Velocidades aumentadas para mejor movilidad.
-  const worldSpdMul = worldNum === 1 ? 1.0 : (worldNum === 2 ? 1.3 : 1.6);
-  const spd = (boss.angry ? 2.8 : 1.8) * worldSpdMul;
+  // Velocidad base — escala con mundo y enojo. Velocidades altas, IA decide la dirección.
+  const worldSpdMul = worldNum === 1 ? 1.0 : (worldNum === 2 ? 1.35 : 1.65);
+  const baseChase = (boss.angry ? 3.2 : 2.0) * worldSpdMul;
+  const dashSpd = (boss.angry ? 6.5 : 5.2) * worldSpdMul;
 
-  // Movimiento más natural: oscilación + pausas BREVES
-  const inPause = boss.pauseT > 0;
-  if(inPause){
-    boss.pauseT--;
-    boss.vx *= 0.88;  // frenar gradual
-    if(boss.pauseT === 0){
-      // cambio de dirección al salir de pausa
-      boss.vx = (P.x > boss.x ? 1 : -1) * spd;
+  // Decremento de cooldowns
+  boss.dashCooldown   = Math.max(0, boss.dashCooldown - 1);
+  boss.pounceCooldown = Math.max(0, boss.pounceCooldown - 1);
+  boss.slamCooldown   = Math.max(0, boss.slamCooldown - 1);
+  boss.fireCooldown   = Math.max(0, boss.fireCooldown - 1);
+  boss.aiTimer++;
+
+  // ─── STATE MACHINE ───
+  const distToPlayer = Math.abs(P.x - boss.x);
+
+  switch(boss.aiState){
+
+    case 'chase': {
+      // Movimiento de persecución con oscilación
+      const dx = P.x - boss.x;
+      const desiredVx = Math.sign(dx) * baseChase;
+      boss.vx += (desiredVx - boss.vx) * 0.18;
+      boss.vx += Math.sin(boss.moveT * 0.1) * 0.3;
+
+      // Saltos cortos para acortar distancia o esquivar
+      if(boss.onGround && boss.aiTimer > 50 + (Math.random()*40|0)){
+        boss.vy = (boss.angry ? -9 : -7);
+        boss.aiTimer = 0;
+        burst(boss.x + boss.w/2, boss.y + boss.h, '#a060ff', 6);
+      }
+
+      // ELEGIR PRÓXIMO ATAQUE según contexto y cooldowns
+      // Si lleva 60+ frames en chase, probar un ataque
+      if(boss.aiTimer > 50){
+        // Dash (acometida horizontal rápida) si jugador está lejos
+        if(distToPlayer > 80 && boss.dashCooldown === 0){
+          boss.aiState = 'dashWarn';
+          boss.aiTimer = 0;
+          boss.dashDir = dx > 0 ? 1 : -1;
+          boss.roarT = 24;
+          break;
+        }
+        // Pounce (salto largo persecutorio) — si está en el suelo y angry
+        if(boss.onGround && boss.pounceCooldown === 0 && boss.angry){
+          boss.aiState = 'pounceWind';
+          boss.aiTimer = 0;
+          boss.roarT = 20;
+          break;
+        }
+        // Slam: salto vertical alto + caída con onda expansiva
+        if(boss.onGround && boss.slamCooldown === 0 && distToPlayer < 120){
+          boss.aiState = 'slamWind';
+          boss.aiTimer = 0;
+          boss.vx *= 0.3;  // frenar antes de slam
+          break;
+        }
+        // Fireball (solo en mundo 3, no muy frecuente)
+        if(worldNum === 3 && boss.fireCooldown === 0 && distToPlayer > 60){
+          boss.aiState = 'fireball';
+          boss.aiTimer = 0;
+          boss.roarT = 18;
+          break;
+        }
+      }
+      break;
     }
-  } else {
-    // Pausas mucho menos frecuentes y más cortas
-    if(boss.moveT > (boss.angry ? 150 : 250) + (Math.random()*60|0)){
-      boss.moveT = 0;
-      boss.pauseT = boss.angry ? 6 : 12;  // pausa breve (0.1-0.2s)
-      boss.roarT = 24;   // mostrar rugido visual
+
+    case 'dashWarn': {
+      // Pequeño tiempo de aviso visual antes del dash (ojos rojos)
+      boss.vx *= 0.5;
+      if(boss.aiTimer > 18){
+        boss.aiState = 'dash';
+        boss.aiTimer = 0;
+        boss.vx = boss.dashDir * dashSpd;
+      }
+      break;
     }
-    // Persigue al jugador con aceleración más fuerte (0.18 en vez de 0.06)
-    const target = P.x;
-    const dx = target - boss.x;
-    const desiredVx = Math.sign(dx) * spd;
-    boss.vx += (desiredVx - boss.vx) * 0.18;
-    // Oscilación sinusoidal lateral (movimiento "felino")
-    boss.vx += Math.sin(boss.moveT * 0.1) * 0.25;
+
+    case 'dash': {
+      // Acometida horizontal rápida
+      boss.vx = boss.dashDir * dashSpd;
+      // Polvo del dash
+      if(boss.moveT % 3 === 0){
+        burst(boss.x + boss.w/2, boss.y + boss.h - 4, '#cca080', 4);
+      }
+      // Terminar dash al chocar pared o tras 35 frames
+      if(boss.aiTimer > 35 ||
+         (boss.dashDir > 0 && boss.x + boss.w > arenaR - 20) ||
+         (boss.dashDir < 0 && boss.x < arenaL + 20)){
+        boss.aiState = 'chase';
+        boss.aiTimer = 0;
+        boss.dashCooldown = boss.angry ? 100 : 160;
+        cam.shakeT = 7;
+      }
+      break;
+    }
+
+    case 'pounceWind': {
+      // Preparación: el boss se agacha (vx pequeño)
+      boss.vx *= 0.5;
+      if(boss.aiTimer > 20){
+        // Saltar grande hacia el jugador
+        const dx = P.x - boss.x;
+        boss.vx = Math.sign(dx) * (baseChase * 2.2);
+        boss.vy = -13;
+        boss.aiState = 'pounce';
+        boss.aiTimer = 0;
+        burst(boss.x + boss.w/2, boss.y + boss.h, '#a060ff', 14);
+        cam.shakeT = 5;
+      }
+      break;
+    }
+
+    case 'pounce': {
+      // En el aire, mantiene su trayectoria
+      // Termina cuando toca el suelo (o por timeout de seguridad)
+      if((boss.onGround && boss.aiTimer > 5) || boss.aiTimer > 120){
+        boss.aiState = 'chase';
+        boss.aiTimer = 0;
+        boss.pounceCooldown = 220;
+        burst(boss.x + boss.w/2, boss.y + boss.h, '#ffd34d', 12);
+        cam.shakeT = 8;
+      }
+      break;
+    }
+
+    case 'slamWind': {
+      // Cargar slam: salta MUY alto vertical
+      boss.vx *= 0.85;
+      if(boss.aiTimer > 14){
+        boss.vy = -16;
+        boss.aiState = 'slamAir';
+        boss.aiTimer = 0;
+      }
+      break;
+    }
+
+    case 'slamAir': {
+      // En el aire — cuando empieza a caer, acelera hacia abajo
+      boss.vx *= 0.85;
+      if(boss.vy >= 0){
+        // Acelera caída
+        boss.vy += GRAV * 0.8;
+      }
+      // Al tocar suelo: SLAM (o timeout de seguridad)
+      if((boss.onGround && boss.aiTimer > 6) || boss.aiTimer > 150){
+        // Onda expansiva
+        burst(boss.x + boss.w/2, boss.y + boss.h, '#ffd34d', 24, 1.5);
+        burst(boss.x + boss.w/2, boss.y + boss.h, '#ff6020', 18, 1.4);
+        cam.shakeT = 16;
+        // Daño si jugador está cerca y en el suelo
+        if(!P.dead && P.inv === 0 && Math.abs(P.x - boss.x) < 100 && P.onGround){
+          P.dead = true;
+          sfxHurt();
+          burst(P.x+P.w/2, P.y+P.h/2, '#ff2020', 14);
+        }
+        boss.aiState = 'chase';
+        boss.aiTimer = 0;
+        boss.slamCooldown = 200;
+      }
+      break;
+    }
+
+    case 'fireball': {
+      // Pequeña preparación, después dispara una bola al jugador
+      boss.vx *= 0.6;
+      if(boss.aiTimer === 12){
+        // Spawn fireball como projectile en window._bossProjectiles
+        if(!window._bossProjectiles) window._bossProjectiles = [];
+        const dx = P.x - boss.x;
+        const dy = P.y - boss.y;
+        const dist = Math.max(1, Math.sqrt(dx*dx + dy*dy));
+        const fbSpd = 4.5;
+        window._bossProjectiles.push({
+          x: boss.x + boss.w/2, y: boss.y + boss.h/2,
+          vx: (dx/dist) * fbSpd,
+          vy: (dy/dist) * fbSpd,
+          w: 12, h: 12,
+          alive: true, life: 90, kind: 'fireball'
+        });
+        burst(boss.x + boss.w/2, boss.y + boss.h/2, '#ff6020', 8);
+      }
+      if(boss.aiTimer > 30){
+        boss.aiState = 'chase';
+        boss.aiTimer = 0;
+        boss.fireCooldown = boss.angry ? 120 : 200;
+      }
+      break;
+    }
   }
 
   // Rebote en paredes
   if(boss.x < arenaL + 10){ boss.vx = Math.abs(boss.vx); boss.x = arenaL + 10; }
   if(boss.x + boss.w > arenaR - 10){ boss.vx = -Math.abs(boss.vx); boss.x = arenaR - 10 - boss.w; }
-  boss.vx = Math.max(-spd, Math.min(spd, boss.vx));
+  // Sin clamp duro de vx para permitir dash rápido — pero limitar a un máximo razonable
+  const maxAbs = dashSpd * 1.2;
+  if(boss.vx > maxAbs) boss.vx = maxAbs;
+  if(boss.vx < -maxAbs) boss.vx = -maxAbs;
   boss.x += boss.vx;
-
-  // Saltos más frecuentes
-  boss.jumpT--;
-  if(boss.jumpT <= 0 && boss.onGround){
-    boss.vy = (boss.angry ? -12 : -9) * (worldNum === 3 ? 1.15 : 1.0);
-    boss.jumpT = boss.angry ? (30 + (Math.random()*15|0)) : (55 + (Math.random()*25|0));
-    burst(boss.x + boss.w/2, boss.y + boss.h, '#a060ff', 10);
-    cam.shakeT = 6;
-  }
 
   boss.vy = Math.min(boss.vy + GRAV, MAX_VY);
   boss.y += boss.vy;
@@ -3015,48 +3343,229 @@ function updateBoss5(){
   const cy = boss.y + boss.h;
   boss.inWater = water && cy > water.surfaceY - 2;
 
-  // Movimiento: persigue al jugador con saltos entre islas
-  const worldSpdMul = worldNum === 1 ? 1.0 : (worldNum === 2 ? 1.3 : 1.6);
-  const spd = (boss.angry ? 2.6 : 1.7) * worldSpdMul;
+  // Inicializar state machine
+  if(!boss.aiState){
+    boss.aiState = 'chase';
+    boss.aiTimer = 0;
+    boss.chargeCooldown = 100;
+    boss.bellyCooldown = 200;
+    boss.spitCooldown = 160;
+    boss.diveCooldown = 280;
+  }
+
+  const worldSpdMul = worldNum === 1 ? 1.0 : (worldNum === 2 ? 1.35 : 1.7);
+  const baseSpd = (boss.angry ? 2.8 : 1.8) * worldSpdMul;
+  const chargeSpd = (boss.angry ? 6 : 5) * worldSpdMul;
+
+  // Decremento cooldowns
+  boss.chargeCooldown = Math.max(0, boss.chargeCooldown - 1);
+  boss.bellyCooldown  = Math.max(0, boss.bellyCooldown - 1);
+  boss.spitCooldown   = Math.max(0, boss.spitCooldown - 1);
+  boss.diveCooldown   = Math.max(0, boss.diveCooldown - 1);
+  boss.aiTimer++;
+
   const dxToPlayer = P.x - boss.x;
-  const desiredVx = Math.sign(dxToPlayer) * spd;
-  boss.vx += (desiredVx - boss.vx) * 0.15;   // aceleración 3x más rápida
+  const distToPlayer = Math.abs(dxToPlayer);
+
+  switch(boss.aiState){
+
+    case 'chase': {
+      // Persecución (acuática o terrestre)
+      const desiredVx = Math.sign(dxToPlayer) * baseSpd;
+      boss.vx += (desiredVx - boss.vx) * 0.15;
+
+      // Saltos cortos cuando está en tierra
+      if(boss.onGround && boss.aiTimer > 35 + (Math.random()*30|0)){
+        boss.vy = boss.angry ? -10 : -8;
+        boss.aiTimer = 0;
+        burst(boss.x + boss.w/2, boss.y + boss.h, '#a06030', 8);
+      }
+      // Si en agua, salto periódico de buceo
+      if(boss.inWater && boss.aiTimer % 40 === 0 && boss.vy >= -1){
+        boss.vy = -7;
+      }
+
+      // Elegir ataque
+      if(boss.aiTimer > 50){
+        // Charge: si lejos
+        if(distToPlayer > 80 && boss.chargeCooldown === 0){
+          boss.aiState = 'chargeWarn';
+          boss.aiTimer = 0;
+          boss.chargeDir = dxToPlayer > 0 ? 1 : -1;
+          boss.roarT = 22;
+          break;
+        }
+        // Belly flop: si está angry y en tierra cerca del jugador
+        if(boss.onGround && boss.angry && boss.bellyCooldown === 0 && distToPlayer < 140){
+          boss.aiState = 'bellyWind';
+          boss.aiTimer = 0;
+          break;
+        }
+        // Spit: lanza semillas hacia el jugador (mundo 2-3, lejano)
+        if(worldNum >= 2 && distToPlayer > 60 && boss.spitCooldown === 0){
+          boss.aiState = 'spit';
+          boss.aiTimer = 0;
+          boss.roarT = 16;
+          break;
+        }
+        // Dive: solo en agua, mundo 3
+        if(worldNum === 3 && boss.inWater && boss.diveCooldown === 0){
+          boss.aiState = 'dive';
+          boss.aiTimer = 0;
+          break;
+        }
+      }
+      break;
+    }
+
+    case 'chargeWarn': {
+      boss.vx *= 0.5;
+      if(boss.aiTimer > 18){
+        boss.aiState = 'charge';
+        boss.aiTimer = 0;
+        boss.vx = boss.chargeDir * chargeSpd;
+      }
+      break;
+    }
+
+    case 'charge': {
+      boss.vx = boss.chargeDir * chargeSpd;
+      // Polvo o spray
+      if(boss.moveT % 3 === 0){
+        const col = boss.inWater ? '#a0c890' : '#cca080';
+        burst(boss.x + boss.w/2, boss.y + boss.h - 4, col, 3);
+      }
+      if(boss.aiTimer > 40 ||
+         (boss.chargeDir > 0 && boss.x + boss.w > boss.arenaR - 20) ||
+         (boss.chargeDir < 0 && boss.x < boss.arenaL + 20)){
+        boss.aiState = 'chase';
+        boss.aiTimer = 0;
+        boss.chargeCooldown = 120;
+        cam.shakeT = 6;
+      }
+      break;
+    }
+
+    case 'bellyWind': {
+      // Cargar belly flop: salto alto vertical
+      boss.vx *= 0.6;
+      if(boss.aiTimer > 14){
+        boss.vy = -15;
+        boss.aiState = 'bellyAir';
+        boss.aiTimer = 0;
+      }
+      break;
+    }
+
+    case 'bellyAir': {
+      // Cae con peso aumentado, sigue al jugador horizontalmente un poco
+      boss.vx *= 0.92;
+      const dx = P.x - boss.x;
+      boss.vx += Math.sign(dx) * 0.4;
+      if(boss.vy >= 0) boss.vy += GRAV * 0.6;
+      if((boss.onGround && boss.aiTimer > 6) || boss.aiTimer > 150){
+        // BELLY FLOP — daño en area ancha
+        burst(boss.x + boss.w/2, boss.y + boss.h, '#a06030', 30, 1.6);
+        burst(boss.x + boss.w/2, boss.y + boss.h, '#ffd34d', 18, 1.4);
+        cam.shakeT = 18;
+        // Daño en area (140 píxeles a cada lado)
+        if(!P.dead && P.inv === 0 && Math.abs(P.x - boss.x) < 140 && P.onGround){
+          P.dead = true;
+          sfxHurt();
+          burst(P.x+P.w/2, P.y+P.h/2, '#ff2020', 14);
+        }
+        boss.aiState = 'chase';
+        boss.aiTimer = 0;
+        boss.bellyCooldown = 180;
+      }
+      break;
+    }
+
+    case 'spit': {
+      // Frena y escupe 1-3 semillas en arco
+      boss.vx *= 0.6;
+      if(boss.aiTimer === 12){
+        // Disparar 1 semilla (3 si angry)
+        if(!window._bossProjectiles) window._bossProjectiles = [];
+        const shots = boss.angry ? 3 : 1;
+        for(let s = 0; s < shots; s++){
+          const dx = P.x - boss.x;
+          const dy = (P.y - 40) - boss.y;   // arco hacia arriba
+          const dist = Math.max(1, Math.sqrt(dx*dx + dy*dy));
+          const sSpd = 4.0;
+          const angleOffset = (s - (shots-1)/2) * 0.18;
+          const baseAng = Math.atan2(dy, dx) + angleOffset;
+          window._bossProjectiles.push({
+            x: boss.x + boss.w/2, y: boss.y + 4,
+            vx: Math.cos(baseAng) * sSpd,
+            vy: Math.sin(baseAng) * sSpd - 1,    // un poco hacia arriba
+            w: 10, h: 10,
+            alive: true, life: 100, kind: 'seed',
+            gravity: true
+          });
+        }
+        burst(boss.x + boss.w/2, boss.y + 4, '#5a8030', 8);
+      }
+      if(boss.aiTimer > 26){
+        boss.aiState = 'chase';
+        boss.aiTimer = 0;
+        boss.spitCooldown = boss.angry ? 100 : 180;
+      }
+      break;
+    }
+
+    case 'dive': {
+      // Se sumerge y reemerge en otra posición (teleport por buceo)
+      boss.vx = 0;
+      if(boss.aiTimer < 20){
+        // Hundirse
+        boss.y += 1.5;
+        if(boss.aiTimer % 3 === 0){
+          burst(boss.x + boss.w/2, water.surfaceY, '#a0c890', 6);
+        }
+      } else if(boss.aiTimer === 20){
+        // Reaparecer en posición opuesta al jugador
+        const newX = P.x < (boss.arenaL + boss.arenaR)/2
+          ? boss.arenaR - 50 - boss.w/2
+          : boss.arenaL + 50;
+        boss.x = newX;
+        boss.y = water.surfaceY - boss.h;
+        boss.vy = -10;   // emerger
+        burst(boss.x + boss.w/2, water.surfaceY, '#a0c890', 26, 1.4);
+        burst(boss.x + boss.w/2, water.surfaceY, '#ffffff', 16);
+        cam.shakeT = 8;
+      } else if(boss.aiTimer > 30){
+        boss.aiState = 'chase';
+        boss.aiTimer = 0;
+        boss.diveCooldown = 240;
+      }
+      break;
+    }
+  }
+
   // Limitar al rango del arena
   boss.x += boss.vx;
   if(boss.x < boss.arenaL){ boss.x = boss.arenaL; boss.vx = Math.abs(boss.vx); }
   if(boss.x + boss.w > boss.arenaR){ boss.x = boss.arenaR - boss.w; boss.vx = -Math.abs(boss.vx); }
 
-  // Gravedad y colisiones con tiles (islas)
-  boss.vy = Math.min(boss.vy + GRAV, MAX_VY);
-  boss.y += boss.vy;
-  boss.onGround = false;
-  for(const t of tiles){
-    if(!SOLID.has(t.t)) continue;
-    if(aabb(boss, t)){
-      if(boss.vy >= 0){ boss.y = t.y - boss.h; boss.vy = 0; boss.onGround = true; }
-      else { boss.y = t.y + t.h; boss.vy = 0; }
+  // Gravedad y colisiones con tiles (islas) — saltar si NO está en dive
+  if(boss.aiState !== 'dive' || boss.aiTimer >= 20){
+    boss.vy = Math.min(boss.vy + GRAV, MAX_VY);
+    boss.y += boss.vy;
+    boss.onGround = false;
+    for(const t of tiles){
+      if(!SOLID.has(t.t)) continue;
+      if(aabb(boss, t)){
+        if(boss.vy >= 0){ boss.y = t.y - boss.h; boss.vy = 0; boss.onGround = true; }
+        else { boss.y = t.y + t.h; boss.vy = 0; }
+      }
     }
   }
 
-  // Si está en el agua, flota a la superficie (no se hunde del todo)
-  if(boss.inWater && !boss.onGround){
+  // Si está en el agua y no está atacando, flota suavemente
+  if(boss.inWater && !boss.onGround && boss.aiState === 'chase'){
     boss.y += (water.surfaceY - boss.h - boss.y) * 0.06;
     boss.vy *= 0.7;
-  }
-
-  // Saltos entre islas más frecuentes
-  if(boss.onGround && boss.moveT % (boss.angry ? 60 : 90) === 0){
-    boss.vy = boss.angry ? -11 : -9;
-    boss.roarT = 24;
-    burst(boss.x + boss.w/2, boss.y + boss.h, '#a06030', 14);
-    cam.shakeT = 5;
-  }
-
-  // Si está en agua, salto periódico de "buceo" (sale del agua)
-  if(boss.inWater && boss.moveT % 50 === 0 && boss.vy >= -2){
-    boss.vy = -8;
-    burst(boss.x + boss.w/2, water.surfaceY, '#a0c890', 18);
-    burst(boss.x + boss.w/2, water.surfaceY, '#ffffff', 10);
   }
 
   // Actualizar Padre (mundo 3)
@@ -3599,6 +4108,84 @@ function updateParts(){
     const f = floatingTexts[i];
     f.y += f.vy; f.life--;
     if(f.life <= 0) floatingTexts.splice(i,1);
+  }
+}
+
+function updateBossProjectiles(){
+  if(!window._bossProjectiles) return;
+  for(let i = window._bossProjectiles.length - 1; i >= 0; i--){
+    const p = window._bossProjectiles[i];
+    if(!p.alive){ window._bossProjectiles.splice(i, 1); continue; }
+    p.x += p.vx;
+    p.y += p.vy;
+    if(p.gravity) p.vy += 0.18;  // proyectiles tipo semilla caen
+    p.life--;
+    if(p.life <= 0){
+      p.alive = false;
+      continue;
+    }
+    // Estela de partículas
+    if(p.life % 3 === 0){
+      const col = p.kind === 'seed' ? '#7a9020' : '#ffaa20';
+      parts.push({
+        x: p.x + p.w/2, y: p.y + p.h/2,
+        vx: (Math.random()-0.5)*0.8,
+        vy: (Math.random()-0.5)*0.8 + 0.3,
+        col, life: 12, ml: 16, sz: 2
+      });
+    }
+    // Colisión con tiles sólidos
+    let hitWall = false;
+    for(const t of tiles){
+      if(!SOLID.has(t.t)) continue;
+      if(p.x + p.w > t.x && p.x < t.x + t.w &&
+         p.y + p.h > t.y && p.y < t.y + t.h){
+        hitWall = true; break;
+      }
+    }
+    if(hitWall){
+      p.alive = false;
+      const col = p.kind === 'seed' ? '#5a8030' : '#ff6020';
+      burst(p.x + p.w/2, p.y + p.h/2, col, 10);
+      continue;
+    }
+    // Colisión con jugador
+    if(!P.dead && P.inv === 0 && aabb(p, P)){
+      if(powerUpT > 0){
+        // Power-up: deflectar
+        p.alive = false;
+        burst(p.x + p.w/2, p.y + p.h/2, '#ff40ff', 12);
+      } else {
+        P.dead = true;
+        burst(P.x+P.w/2, P.y+P.h/2, '#ff2020', 16);
+        cam.shakeT = 12;
+        sfxHurt();
+        p.alive = false;
+      }
+    }
+  }
+}
+
+function drawBossProjectiles(){
+  if(!window._bossProjectiles) return;
+  for(const p of window._bossProjectiles){
+    if(!p.alive) continue;
+    const x = p.x - cam.x, y = p.y;
+    if(x < -20 || x > CW + 20) continue;
+    // Bola de fuego con halo
+    const pulse = 0.5 + Math.sin(fc*0.4)*0.5;
+    ctx.fillStyle = `rgba(255,120,40,${0.3 + pulse*0.2})`;
+    ctx.beginPath();
+    ctx.arc(x + p.w/2, y + p.h/2, 10, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#ffd34d';
+    ctx.beginPath();
+    ctx.arc(x + p.w/2, y + p.h/2, 5, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(x + p.w/2, y + p.h/2, 2, 0, Math.PI*2);
+    ctx.fill();
   }
 }
 function updatePlayerBullets(){
@@ -7332,6 +7919,7 @@ function render(){
   if((level === 2 || level === 5) && boss){
     drawBoss();
   }
+  drawBossProjectiles();
 
   // dog
   if(P && !P.dead){
@@ -7452,6 +8040,7 @@ function step(){
       updateFallTiles();
       updateItems();
       updatePlayerBullets();
+      updateBossProjectiles();
       updateParts();
       updateArtifacts();
       if(level === 3) updateSkateboard();
@@ -7464,6 +8053,7 @@ function step(){
       updateFallTiles();
       updateItems();
       updatePlayerBullets();
+      updateBossProjectiles();
       updateParts();
       updateArtifacts();
       checkFlag();
