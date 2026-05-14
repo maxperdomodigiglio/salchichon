@@ -366,7 +366,14 @@ button.action-btn.secondary{
     <div><span>P</span> Pausa</div>
   </div>
   <p class="hint">3 MUNDOS × 5 NIVELES — Pradera · Caverna · Wonder Wiener · Nordeltopolis · Pantano. Mundo 2 TÉTRICO, Mundo 3 FRENÉTICO.</p>
-  <button class="action-btn" id="btn-start">▶ JUGAR AHORA</button>
+  <div id="save-info" style="display:none; margin:8px 0 12px 0; padding:10px 14px; background:rgba(120,220,140,0.12); border:1px solid rgba(120,220,140,0.4); border-radius:8px; color:#a0f0b0; font-size:13px;">
+    <strong style="color:#88e088">💾 Partida guardada:</strong>
+    <span id="save-info-text"></span>
+  </div>
+  <div id="menu-buttons" style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
+    <button class="action-btn" id="btn-continue" style="display:none; background:linear-gradient(180deg,#5ad080,#3a9050);">▶ CONTINUAR</button>
+    <button class="action-btn" id="btn-start">▶ NUEVA PARTIDA</button>
+  </div>
 </div>
 
 <!-- ═══════════ Mensaje genérico (transiciones, victorias) ═══════════ -->
@@ -1164,8 +1171,118 @@ function startGame(){
   subLevelUsed = false;
   inSubLevel = false;
   savedMainState = null;
+  clearSave();  // arranca nuevo, borra cualquier save previo
   initLevel(1);
   if(!loopGo){ loopGo=true; requestAnimationFrame(loop); }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  AUTOGUARDADO — persiste el progreso en localStorage
+//  Funciona automáticamente en Vercel (es HTML estático).
+//  Por dispositivo+navegador. No sincroniza entre dispositivos.
+// ═══════════════════════════════════════════════════════════════
+const SAVE_KEY = 'sdb_save_v1';
+
+function saveGame(){
+  if(typeof localStorage === 'undefined') return;
+  try {
+    const data = {
+      v: 1,
+      worldNum: worldNum,
+      level: level,
+      lives: lives,
+      bones: bones,
+      shots: shots,
+      totalBonesEarned: totalBonesEarned,
+      bonesSinceLastLife: bonesSinceLastLife,
+      chosenChar: chosenChar,
+      subLevelUsed: subLevelUsed,
+      timestamp: Date.now()
+    };
+    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+  } catch(e){ /* localStorage puede fallar en modo privado */ }
+}
+
+function loadSave(){
+  if(typeof localStorage === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if(!raw) return null;
+    const data = JSON.parse(raw);
+    if(data.v !== 1) return null;
+    // Validar campos críticos
+    if(typeof data.worldNum !== 'number' || data.worldNum < 1 || data.worldNum > 3) return null;
+    if(typeof data.level !== 'number' || data.level < 1 || data.level > 5) return null;
+    if(typeof data.lives !== 'number' || data.lives < 1) return null;
+    return data;
+  } catch(e){ return null; }
+}
+
+function clearSave(){
+  if(typeof localStorage === 'undefined') return;
+  try { localStorage.removeItem(SAVE_KEY); } catch(e){}
+}
+
+function hasSave(){
+  return loadSave() !== null;
+}
+
+function continueGame(){
+  const data = loadSave();
+  if(!data){ startGame(); return; }
+  document.getElementById('msg-main').classList.add('hidden');
+  document.getElementById('msg').classList.add('hidden');
+  initAudio();
+  worldNum = data.worldNum;
+  lives = data.lives;
+  bones = data.bones;
+  shots = data.shots;
+  totalBonesEarned = data.totalBonesEarned || 0;
+  bonesSinceLastLife = data.bonesSinceLastLife || 0;
+  chosenChar = data.chosenChar || 'wiener';
+  subLevelUsed = !!data.subLevelUsed;
+  inSubLevel = false;
+  savedMainState = null;
+  playerBullets = [];
+  paused = false;
+  enemySpeedMul = worldNum === 2 ? 2.0 : worldNum === 3 ? 2.5 : 1.0;
+  initLevel(data.level);
+  if(!loopGo){ loopGo=true; requestAnimationFrame(loop); }
+}
+
+// Formato amigable para mostrar el save en pantalla
+function describeSave(){
+  const data = loadSave();
+  if(!data) return null;
+  const wn = data.worldNum;
+  const lvl = data.level;
+  const char = data.chosenChar === 'doverman' ? 'Salchi-Doverman' : 'Wiener';
+  return {
+    worldName: 'MUNDO ' + wn + '-' + lvl,
+    lives: data.lives,
+    bones: data.totalBonesEarned || data.bones,
+    char: char
+  };
+}
+
+// Actualiza el estado visual del menú principal (botón continuar + info save)
+function refreshMainMenu(){
+  const continueBtn = document.getElementById('btn-continue');
+  const saveInfo = document.getElementById('save-info');
+  const saveInfoText = document.getElementById('save-info-text');
+  const savedDesc = describeSave();
+  if(savedDesc){
+    if(continueBtn) continueBtn.style.display = 'inline-block';
+    if(saveInfo) saveInfo.style.display = 'block';
+    if(saveInfoText){
+      saveInfoText.textContent =
+        ' ' + savedDesc.worldName + ' · ' + savedDesc.char +
+        ' · ♥' + savedDesc.lives + ' · 🦴' + savedDesc.bones;
+    }
+  } else {
+    if(continueBtn) continueBtn.style.display = 'none';
+    if(saveInfo) saveInfo.style.display = 'none';
+  }
 }
 
 function initLevel(lvl){
@@ -1216,6 +1333,8 @@ function initLevel(lvl){
   hud();
   // Arrancar track del nivel (key depende del mundo)
   startMusic('w' + worldNum + 'l' + lvl);
+  // Autoguardar al iniciar cada nivel (salvo subnivel secreto)
+  if(!inSubLevel) saveGame();
 }
 
 function hud(){
@@ -3031,13 +3150,14 @@ function updateBoss(){
   if(boss.roarT > 0) boss.roarT--;
 
   // Inicializar state machine si no está
+  // Cooldowns iniciales ALTOS: da tiempo al jugador a posicionarse cuando entra a la sala.
   if(!boss.aiState){
     boss.aiState = 'chase';
     boss.aiTimer = 0;
-    boss.dashCooldown = 90;
-    boss.pounceCooldown = 180;
-    boss.slamCooldown = 240;
-    boss.fireCooldown = 200;
+    boss.dashCooldown = 180;
+    boss.pounceCooldown = 280;
+    boss.slamCooldown = 320;
+    boss.fireCooldown = 240;
   }
 
   // Carpincho madre (nivel 5) — escalado diferente
@@ -3048,6 +3168,33 @@ function updateBoss(){
 
   const arenaL = 168*TILE;
   const arenaR = 192*TILE - boss.w;
+
+  // SI EL JUGADOR ESTÁ FUERA DEL ARENA, el boss patrulla suavemente sin atacar.
+  // Esto evita que el boss cargue al jugador apenas entra a la sala.
+  const playerInArena = P.x + P.w > arenaL && P.x < arenaR + boss.w + 20;
+  if(!playerInArena){
+    // Patrullaje suave (idle) — vuelve al centro de la arena
+    const center = (arenaL + arenaR) / 2;
+    const dx = center - boss.x;
+    boss.vx += (Math.sign(dx) * 1.0 - boss.vx) * 0.05;
+    boss.vx *= 0.9;
+    if(Math.abs(boss.vx) > 1.2) boss.vx = Math.sign(boss.vx) * 1.2;
+    boss.x += boss.vx;
+    if(boss.x < arenaL + 10){ boss.vx = Math.abs(boss.vx); boss.x = arenaL + 10; }
+    if(boss.x + boss.w > arenaR - 10){ boss.vx = -Math.abs(boss.vx); boss.x = arenaR - 10 - boss.w; }
+    // Gravedad
+    boss.vy = Math.min(boss.vy + GRAV, MAX_VY);
+    boss.y += boss.vy;
+    boss.onGround = false;
+    for(const t of tiles){
+      if(!SOLID.has(t.t)) continue;
+      if(aabb(boss, t)){
+        if(boss.vy >= 0){ boss.y = t.y - boss.h; boss.vy = 0; boss.onGround = true; }
+        else { boss.y = t.y + boss.h; boss.vy = 0; }
+      }
+    }
+    return;
+  }
 
   // Velocidad base — escala con mundo y enojo. Velocidades altas, IA decide la dirección.
   const worldSpdMul = worldNum === 1 ? 1.0 : (worldNum === 2 ? 1.35 : 1.65);
@@ -3262,8 +3409,14 @@ function updateBoss(){
 
   if(P.dead) return;
 
+  // Hitbox del boss más pequeña que el sprite (más justa con el jugador)
+  const bossHB = {
+    x: boss.x + 6, y: boss.y + 4,
+    w: boss.w - 12, h: boss.h - 4
+  };
+
   // Power-up activo: matar al boss al tocar
-  if(powerUpT > 0 && aabb(P, boss)){
+  if(powerUpT > 0 && aabb(P, bossHB)){
     boss.hp = 0;
     boss.alive = false;
     burst(boss.x + boss.w/2, boss.y + boss.h/2, '#ffd34d', 60, 1.6);
@@ -3275,10 +3428,11 @@ function updateBoss(){
   }
 
   if(P.inv > 0) return;
-  if(aabb(P, boss)){
-    if(P.vy > 0.5 && P.y + P.h < boss.y + boss.h*0.4){
+  if(aabb(P, bossHB)){
+    if(P.vy > 0.5 && P.y + P.h < boss.y + boss.h*0.5){
       boss.hp--; boss.hitFlash = 18;
       P.vy = -7;
+      P.inv = 30;   // pequeña invulnerabilidad post-golpe (1/2 segundo)
       cam.shakeT = 8;
       sfxHurt();
       burst(boss.x + boss.w/2, boss.y + 8, '#ff4040', 16);
@@ -3351,49 +3505,74 @@ function updateBoss5(){
   const dxToPlayer = P.x - boss.x;
   const distToPlayer = Math.abs(dxToPlayer);
 
+  // Si el jugador está MUY lejos (fuera del arena), el boss solo patrulla suave
+  const playerInArena = P.x + P.w > boss.arenaL - 4*TILE && P.x < boss.arenaR + 4*TILE;
+  if(!playerInArena){
+    // Patrullaje horizontal lento, sin saltos
+    const center = (boss.arenaL + boss.arenaR) / 2;
+    const dxC = center - boss.x;
+    boss.vx += (Math.sign(dxC) * 0.8 - boss.vx) * 0.05;
+    if(Math.abs(boss.vx) > 1.0) boss.vx = Math.sign(boss.vx) * 1.0;
+    // Aplicar movimiento + gravedad + colisiones
+    boss.x += boss.vx;
+    if(boss.x < boss.arenaL){ boss.x = boss.arenaL; boss.vx = Math.abs(boss.vx); }
+    if(boss.x + boss.w > boss.arenaR){ boss.x = boss.arenaR - boss.w; boss.vx = -Math.abs(boss.vx); }
+    boss.vy = Math.min(boss.vy + GRAV, MAX_VY);
+    boss.y += boss.vy;
+    boss.onGround = false;
+    for(const t of tiles){
+      if(!SOLID.has(t.t)) continue;
+      if(aabb(boss, t)){
+        if(boss.vy >= 0){ boss.y = t.y - boss.h; boss.vy = 0; boss.onGround = true; }
+        else { boss.y = t.y + t.h; boss.vy = 0; }
+      }
+    }
+    if(boss.inWater && !boss.onGround){
+      boss.y += (water.surfaceY - boss.h - boss.y) * 0.06;
+      boss.vy *= 0.7;
+    }
+    return;
+  }
+
   switch(boss.aiState){
 
     case 'chase': {
       // Persecución (acuática o terrestre)
       const desiredVx = Math.sign(dxToPlayer) * baseSpd;
-      boss.vx += (desiredVx - boss.vx) * 0.15;
+      boss.vx += (desiredVx - boss.vx) * 0.22;   // aceleración más fuerte
 
-      // Saltos cortos cuando está en tierra (usa jumpT independiente, NO resetea aiTimer)
+      // Saltos cortos cuando está en tierra (jumpT independiente)
       boss.jumpT = (boss.jumpT || 0) - 1;
-      if(boss.onGround && boss.jumpT <= 0){
-        boss.vy = boss.angry ? -10 : -8;
-        boss.jumpT = 40 + (Math.random()*30|0);
+      if(boss.onGround && boss.jumpT <= 0 && distToPlayer < 200){
+        boss.vy = boss.angry ? -8 : -6;          // saltos más cortos para no verse "subiendo y bajando"
+        boss.jumpT = 60 + (Math.random()*40|0);  // menos frecuentes
         burst(boss.x + boss.w/2, boss.y + boss.h, '#a06030', 8);
       }
-      // Si en agua, salto periódico de buceo
-      if(boss.inWater && boss.moveT % 50 === 0 && boss.vy >= -1){
-        boss.vy = -7;
+      // Si en agua, salto periódico de buceo (menos frecuente)
+      if(boss.inWater && boss.moveT % 80 === 0 && boss.vy >= -1){
+        boss.vy = -6;
       }
 
       // Elegir ataque (aiTimer cuenta tiempo en chase sin reiniciarse)
-      if(boss.aiTimer > 50){
-        // Charge: si lejos
-        if(distToPlayer > 80 && boss.chargeCooldown === 0){
+      if(boss.aiTimer > 60){
+        if(distToPlayer > 100 && boss.chargeCooldown === 0){
           boss.aiState = 'chargeWarn';
           boss.aiTimer = 0;
           boss.chargeDir = dxToPlayer > 0 ? 1 : -1;
           boss.roarT = 22;
           break;
         }
-        // Belly flop: si está angry y en tierra cerca del jugador
         if(boss.onGround && boss.angry && boss.bellyCooldown === 0 && distToPlayer < 140){
           boss.aiState = 'bellyWind';
           boss.aiTimer = 0;
           break;
         }
-        // Spit: lanza semillas hacia el jugador (mundo 2-3, lejano)
         if(worldNum >= 2 && distToPlayer > 60 && boss.spitCooldown === 0){
           boss.aiState = 'spit';
           boss.aiTimer = 0;
           boss.roarT = 16;
           break;
         }
-        // Dive: solo en agua, mundo 3
         if(worldNum === 3 && boss.inWater && boss.diveCooldown === 0){
           boss.aiState = 'dive';
           boss.aiTimer = 0;
@@ -3560,8 +3739,14 @@ function updateBoss5(){
 
   if(P.dead) return;
 
+  // Hitbox del boss más pequeña que el sprite (más justa con el jugador)
+  const bossHB = {
+    x: boss.x + 6, y: boss.y + 4,
+    w: boss.w - 12, h: boss.h - 4
+  };
+
   // Power-up: matar al boss instantáneo
-  if(powerUpT > 0 && aabb(P, boss)){
+  if(powerUpT > 0 && aabb(P, bossHB)){
     boss.hp = 0;
     boss.alive = false;
     burst(boss.x + boss.w/2, boss.y + boss.h/2, '#ffd34d', 60, 1.6);
@@ -3573,10 +3758,11 @@ function updateBoss5(){
   }
 
   if(P.inv > 0) return;
-  if(aabb(P, boss)){
-    if(P.vy > 0.5 && P.y + P.h < boss.y + boss.h*0.4){
+  if(aabb(P, bossHB)){
+    if(P.vy > 0.5 && P.y + P.h < boss.y + boss.h*0.5){
       boss.hp--; boss.hitFlash = 18;
       P.vy = -7;
+      P.inv = 30;   // invul post-golpe
       cam.shakeT = 8;
       sfxHurt();
       burst(boss.x + boss.w/2, boss.y + 8, '#ff4040', 16);
@@ -7921,6 +8107,7 @@ function showMsg(title, sub, btnLabel, cb){
 function showGameOver(){
   loopGo = false;
   stopMusic();
+  clearSave();   // game over: borrar save (debe empezar de cero)
   const totalBones = totalBonesEarned;
   // ammo + bones reset on full game-over (3 lives lost)
   shots = 0;
@@ -7944,6 +8131,7 @@ function showGameOver(){
   document.getElementById('msg-btn').onclick = () => {
     msg.classList.add('hidden');
     document.getElementById('msg-main').classList.remove('hidden');
+    refreshMainMenu();
   };
 }
 
@@ -8320,6 +8508,7 @@ function drawBambyPortrait(g){
 function showFinalVictory(){
   loopGo = false;
   stopMusic();
+  clearSave();   // se completó el juego: borrar save
   const totalBones = totalBonesEarned;
   const heroName = chosenChar === 'wiener' ? 'Wiener' : 'Salchi-Doverman';
   const msg = document.getElementById('msg');
@@ -8350,6 +8539,7 @@ function showFinalVictory(){
   document.getElementById('msg-btn').onclick = () => {
     msg.classList.add('hidden');
     document.getElementById('msg-main').classList.remove('hidden');
+    refreshMainMenu();
   };
 }
 
@@ -8590,6 +8780,16 @@ document.addEventListener('DOMContentLoaded', () => {
       startGame();
     });
   }
+  // continue button (sólo visible si hay save)
+  const continueBtn = document.getElementById('btn-continue');
+  if(continueBtn){
+    continueBtn.addEventListener('click', () => {
+      document.getElementById('msg-main').classList.add('hidden');
+      continueGame();
+    });
+  }
+  // Mostrar info de save y botón continuar si hay partida guardada
+  refreshMainMenu();
 });
 
 // pause toggle (P key) handled in main keyboard listener.
