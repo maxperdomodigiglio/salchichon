@@ -15,6 +15,18 @@ html,body{
   color:#fff;
   -webkit-user-select:none;user-select:none;
 }
+/* Modo "pantalla completa simulada" — fallback para iOS Safari iPhone
+   donde Fullscreen API no está disponible. Sin scroll, sin elementos del browser. */
+body.fake-fullscreen{
+  position:fixed;
+  top:0;left:0;right:0;bottom:0;
+  width:100vw;height:100vh;
+  margin:0;padding:0;
+  overflow:hidden;
+}
+body.fake-fullscreen #wrapper{
+  width:100vw;height:100vh;
+}
 #wrapper{
   position:fixed;inset:0;
   display:flex;flex-direction:column;
@@ -406,6 +418,7 @@ button.action-btn.secondary{
     <div><span>Bloque ?</span> Golpear desde abajo</div>
     <div><span>S</span> Guardar partida</div>
     <div><span>P</span> Pausa</div>
+    <div><span>Q</span> Pantalla completa</div>
     <div><span>M</span> Mutear música</div>
   </div>
   <div id="save-info" style="display:none; margin:8px 0 12px 0; padding:10px 14px; background:rgba(120,220,140,0.12); border:1px solid rgba(120,220,140,0.4); border-radius:8px; color:#a0f0b0; font-size:13px;">
@@ -489,6 +502,10 @@ document.addEventListener('keydown', e => {
   }
   if(e.code==='KeyM' || e.key==='m' || e.key==='M'){
     toggleMusic();
+  }
+  // Pantalla completa con tecla Q
+  if(e.code==='KeyQ' || e.key==='q' || e.key==='Q'){
+    toggleFullscreen();
   }
   // Guardar manual con tecla S (también baja al subnivel, ambas acciones son compatibles)
   if(e.code==='KeyS' || e.key==='s' || e.key==='S'){
@@ -1206,6 +1223,86 @@ function toggleMusic(){
     startMusic(key);
   }
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  PANTALLA COMPLETA
+//  PC: tecla Q (también funciona en cualquier momento del juego).
+//  Móvil: se activa AUTOMÁTICAMENTE al primer toque del usuario
+//  (los navegadores no permiten activarla sin un gesto).
+//  iOS Safari iPhone: Fullscreen API no disponible — fallback con CSS.
+// ═══════════════════════════════════════════════════════════════
+let fullscreenAttempted = false;
+
+function isFullscreen(){
+  return !!(document.fullscreenElement ||
+            document.webkitFullscreenElement ||
+            document.mozFullScreenElement ||
+            document.msFullscreenElement ||
+            document.body.classList.contains('fake-fullscreen'));
+}
+
+function enterFullscreen(){
+  const el = document.documentElement;
+  // Probar Fullscreen API estándar y prefijos
+  if(el.requestFullscreen){
+    el.requestFullscreen().catch(()=>{ enterFakeFullscreen(); });
+  } else if(el.webkitRequestFullscreen){
+    el.webkitRequestFullscreen();
+  } else if(el.mozRequestFullScreen){
+    el.mozRequestFullScreen();
+  } else if(el.msRequestFullscreen){
+    el.msRequestFullscreen();
+  } else {
+    // iOS Safari iPhone: simular con CSS
+    enterFakeFullscreen();
+  }
+}
+
+function exitFullscreen(){
+  if(document.fullscreenElement && document.exitFullscreen){
+    document.exitFullscreen().catch(()=>{});
+  } else if(document.webkitFullscreenElement && document.webkitExitFullscreen){
+    document.webkitExitFullscreen();
+  } else if(document.mozFullScreenElement && document.mozCancelFullScreen){
+    document.mozCancelFullScreen();
+  } else if(document.msFullscreenElement && document.msExitFullscreen){
+    document.msExitFullscreen();
+  }
+  // Quitar fake fullscreen siempre por las dudas
+  document.body.classList.remove('fake-fullscreen');
+}
+
+function enterFakeFullscreen(){
+  // Fallback CSS para navegadores sin Fullscreen API (típicamente iOS Safari iPhone)
+  document.body.classList.add('fake-fullscreen');
+}
+
+function toggleFullscreen(){
+  if(isFullscreen()){
+    exitFullscreen();
+  } else {
+    enterFullscreen();
+  }
+}
+
+// En dispositivos táctiles: intentar entrar a pantalla completa
+// en el primer toque del usuario (gesto válido). No bloquea si falla.
+function tryAutoFullscreenOnTouch(){
+  if(fullscreenAttempted) return;
+  fullscreenAttempted = true;
+  if(isTouchDevice() && !isFullscreen()){
+    try { enterFullscreen(); } catch(e){}
+  }
+}
+
+// Ajustar el canvas cuando entramos/salimos de pantalla completa
+['fullscreenchange','webkitfullscreenchange','mozfullscreenchange','MSFullscreenChange'].forEach(ev => {
+  document.addEventListener(ev, () => {
+    // Forzar recalculo de tamaño del canvas
+    if(typeof resizeCanvas === 'function') resizeCanvas();
+    bgDirty = true;
+  });
+});
 
 // ═══════════════════════════════════════════════════════════════
 //  ARRANQUE
@@ -9714,6 +9811,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const startBtn = document.getElementById('btn-start');
   if(startBtn){
     startBtn.addEventListener('click', () => {
+      tryAutoFullscreenOnTouch();   // móvil: aprovechar el gesto de click
       document.getElementById('msg-main').classList.add('hidden');
       const p1Name = (document.getElementById('p1-name').value || 'Jugador 1').trim();
       const p2Name = (document.getElementById('p2-name').value || 'Jugador 2').trim();
@@ -9735,6 +9833,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const continueBtn = document.getElementById('btn-continue');
   if(continueBtn){
     continueBtn.addEventListener('click', () => {
+      tryAutoFullscreenOnTouch();   // móvil: aprovechar el gesto de click
       document.getElementById('msg-main').classList.add('hidden');
       continueGame();
     });
