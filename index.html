@@ -257,6 +257,26 @@ button.action-btn:active{
   transform:translateY(4px);
   box-shadow:0 0 0 #884c00, 0 2px 8px rgba(255,200,80,0.3);
 }
+/* Selector de modo 1P/2P */
+button.mode-btn{
+  background:rgba(255,255,255,0.06);
+  border:2px solid rgba(255,255,255,0.25);
+  color:#ccc;
+  font-family:inherit;font-size:14px;font-weight:700;
+  padding:10px 20px;border-radius:6px;cursor:pointer;
+  transition:all 0.12s;
+  letter-spacing:1px;
+}
+button.mode-btn:hover{
+  background:rgba(255,210,80,0.12);
+  color:#fff;
+}
+button.mode-btn.selected{
+  background:linear-gradient(180deg,rgba(255,210,80,0.3),rgba(232,156,28,0.2));
+  border-color:#ffd34d;
+  color:#ffd34d;
+  box-shadow:0 0 16px rgba(255,210,80,0.3);
+}
 button.action-btn.secondary{
   background:linear-gradient(180deg,#777,#444);
   color:#fff;
@@ -341,7 +361,14 @@ button.action-btn.secondary{
 <!-- ═══════════ Menú principal ═══════════ -->
 <div id="msg-main" class="overlay">
   <h1>★ SUPER DACHSHUND BROS ★</h1>
-  <h2>Elegí tu héroe</h2>
+
+  <!-- Selector de modo -->
+  <div id="mode-select" style="display:flex;justify-content:center;gap:12px;margin:4px 0 14px 0;">
+    <button class="mode-btn selected" data-mode="1p" id="mode-1p">👤 1 JUGADOR</button>
+    <button class="mode-btn" data-mode="2p" id="mode-2p">👥 2 JUGADORES</button>
+  </div>
+
+  <h2 id="char-title">Elegí tu héroe</h2>
   <div id="char-select">
     <div class="char-card" data-char="wiener">
       <canvas id="prev-wiener" width="120" height="80"></canvas>
@@ -356,6 +383,21 @@ button.action-btn.secondary{
       <div class="stats"><span>» Fuerte</span><span>» Salto +</span></div>
     </div>
   </div>
+
+  <!-- Inputs de nombres -->
+  <div id="player-names" style="display:flex;flex-direction:column;gap:8px;margin:8px auto 12px;max-width:340px;">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <label style="color:#ffd34d;font-weight:700;min-width:80px;">Jugador 1:</label>
+      <input type="text" id="p1-name" maxlength="14" value="Wiener" placeholder="Tu nombre"
+        style="flex:1;padding:8px 10px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,210,80,0.4);border-radius:6px;color:#fff;font-size:14px;outline:none;">
+    </div>
+    <div id="p2-name-row" style="display:none;align-items:center;gap:8px;">
+      <label style="color:#80d0ff;font-weight:700;min-width:80px;">Jugador 2:</label>
+      <input type="text" id="p2-name" maxlength="14" value="Doberman" placeholder="Nombre 2P"
+        style="flex:1;padding:8px 10px;background:rgba(255,255,255,0.08);border:1px solid rgba(128,208,255,0.4);border-radius:6px;color:#fff;font-size:14px;outline:none;">
+    </div>
+  </div>
+
   <div class="controls-grid">
     <div><span>← →</span> Moverse</div>
     <div><span>Z / ESPACIO / ↑</span> Saltar</div>
@@ -373,6 +415,7 @@ button.action-btn.secondary{
   <div id="menu-buttons" style="display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
     <button class="action-btn" id="btn-continue" style="display:none; background:linear-gradient(180deg,#5ad080,#3a9050);">▶ CONTINUAR</button>
     <button class="action-btn" id="btn-start">▶ NUEVA PARTIDA</button>
+    <button class="action-btn" id="btn-scores" style="background:linear-gradient(180deg,#c080ff,#7050a0);">🏆 PUNTAJES</button>
   </div>
 </div>
 
@@ -1167,21 +1210,163 @@ function toggleMusic(){
 // ═══════════════════════════════════════════════════════════════
 //  ARRANQUE
 // ═══════════════════════════════════════════════════════════════
-function startGame(){
+// ═══════════════════════════════════════════════════════════════
+//  SISTEMA MULTI-JUGADOR (1P o 2P con turnos alternados)
+//  En 2P: cada vez que el jugador activo pierde una vida, pasa el turno al otro.
+//  Si un jugador queda sin vidas, sigue jugando el otro hasta que también muera.
+// ═══════════════════════════════════════════════════════════════
+let twoPlayerMode = false;
+let currentPlayer = 0;        // índice del jugador activo (0 o 1)
+let players = [];             // estado por jugador
+
+function makePlayer(name, char){
+  return {
+    name: name || 'Jugador',
+    char: char || 'wiener',
+    lives: 3,
+    bones: 0,
+    shots: 0,
+    totalBonesEarned: 0,
+    bonesSinceLastLife: 0,
+    worldNum: 1,
+    level: 1,
+    subLevelUsed: false,
+    subLevel4Used: false,
+    enemySpeedMul: 1.0,
+    alive: true,              // false cuando se queda sin vidas
+    completed: false          // true si terminó el juego
+  };
+}
+
+// Guarda el estado del jugador actual en players[currentPlayer]
+function savePlayerState(){
+  if(!twoPlayerMode || !players[currentPlayer]) return;
+  const p = players[currentPlayer];
+  p.lives = lives;
+  p.bones = bones;
+  p.shots = shots;
+  p.totalBonesEarned = totalBonesEarned;
+  p.bonesSinceLastLife = bonesSinceLastLife;
+  p.worldNum = worldNum;
+  p.level = level;
+  p.subLevelUsed = subLevelUsed;
+  p.subLevel4Used = subLevel4Used;
+  p.enemySpeedMul = enemySpeedMul;
+  p.char = chosenChar;
+}
+
+// Carga el estado del jugador desde players[currentPlayer] a las globales
+function loadPlayerState(){
+  if(!twoPlayerMode || !players[currentPlayer]) return;
+  const p = players[currentPlayer];
+  lives = p.lives;
+  bones = p.bones;
+  shots = p.shots;
+  totalBonesEarned = p.totalBonesEarned;
+  bonesSinceLastLife = p.bonesSinceLastLife;
+  worldNum = p.worldNum;
+  level = p.level;
+  subLevelUsed = p.subLevelUsed;
+  subLevel4Used = p.subLevel4Used;
+  enemySpeedMul = p.enemySpeedMul;
+  chosenChar = p.char;
+}
+
+// Llamada cuando el jugador pierde una vida — alterna turno en 2P
+function switchPlayerTurn(){
+  if(!twoPlayerMode) return false;
+  // Guardar el estado actual
+  savePlayerState();
+  // Marcar al jugador actual como "sin vidas" si lives === 0
+  if(players[currentPlayer].lives <= 0){
+    players[currentPlayer].alive = false;
+  }
+  // Buscar el otro jugador que sigue vivo
+  const otherIdx = currentPlayer === 0 ? 1 : 0;
+  if(players[otherIdx] && players[otherIdx].alive){
+    currentPlayer = otherIdx;
+    loadPlayerState();
+    showPlayerSwitchScreen();
+    return true;
+  }
+  // Si el otro ya está muerto, ver si este jugador todavía tiene vidas
+  if(players[currentPlayer].alive){
+    // Sigue solo este (el otro ya cayó)
+    return false;
+  }
+  // Ambos muertos: game over total
+  return false;
+}
+
+function bothPlayersDead(){
+  if(!twoPlayerMode) return lives <= 0;
+  return players.every(p => !p.alive);
+}
+
+// Pantalla intermedia que muestra a quién le toca jugar
+function showPlayerSwitchScreen(){
+  loopGo = false;
+  paused = true;
+  stopMusic();
+  const p = players[currentPlayer];
+  const otherIdx = currentPlayer === 0 ? 1 : 0;
+  const other = players[otherIdx];
+  const msg = document.getElementById('msg');
+  const charName = p.char === 'doverman' ? 'Salchi-Doberman' : 'Wiener';
+  const accentColor = currentPlayer === 0 ? '#ffd34d' : '#80d0ff';
+  msg.innerHTML = `
+    <div class="msg-card msg-card-win">
+      <h2 class="msg-title" style="color:${accentColor}">★ TURNO DE ${p.name.toUpperCase()} ★</h2>
+      <p class="msg-sub">Jugador ${currentPlayer + 1} · ${charName}</p>
+      <div class="msg-stats">
+        <div class="stat-row"><span>Mundo:</span> <strong>${p.worldNum}-${p.level}</strong></div>
+        <div class="stat-row"><span>♥ Vidas:</span> <strong>${p.lives}</strong></div>
+        <div class="stat-row"><span>🦴 Huesitos:</span> <strong>${p.totalBonesEarned}</strong></div>
+      </div>
+      ${other ? `<p class="msg-sub" style="font-size:12px;color:#888;margin-top:14px">${other.name}: ${other.alive ? '♥' + other.lives + ' · 🦴' + other.totalBonesEarned : 'fuera del juego'}</p>` : ''}
+      <button class="action-btn" id="msg-btn" style="background:linear-gradient(180deg,${accentColor},${accentColor});">CONTINUAR</button>
+    </div>
+  `;
+  msg.classList.remove('hidden');
+  document.getElementById('msg-btn').onclick = () => {
+    msg.classList.add('hidden');
+    paused = false;
+    loopGo = true;
+    initLevel(level);
+    requestAnimationFrame(loop);
+  };
+}
+
+function startGame(opts){
   document.getElementById('msg-main').classList.add('hidden');
   document.getElementById('msg').classList.add('hidden');
-  initAudio();  // necesita gesto de usuario (el click ya lo dio)
-  lives = 3; bones = 0; shots = 0; playerBullets = [];
-  totalBonesEarned = 0; bonesSinceLastLife = 0;
+  initAudio();
   paused = false;
-  worldNum = 1;
-  enemySpeedMul = 1.0;
-  subLevelUsed = false;
-  subLevel4Used = false;
+  // Modo single o dual
+  if(opts && opts.twoPlayer){
+    twoPlayerMode = true;
+    players = [
+      makePlayer(opts.p1Name || 'Jugador 1', opts.p1Char || 'wiener'),
+      makePlayer(opts.p2Name || 'Jugador 2', opts.p2Char || 'doverman')
+    ];
+    currentPlayer = 0;
+    loadPlayerState();
+  } else {
+    twoPlayerMode = false;
+    players = [];
+    currentPlayer = 0;
+    lives = 3; bones = 0; shots = 0;
+    totalBonesEarned = 0; bonesSinceLastLife = 0;
+    worldNum = 1;
+    enemySpeedMul = 1.0;
+    subLevelUsed = false;
+    subLevel4Used = false;
+  }
+  playerBullets = [];
   inSubLevel = false;
   savedMainState = null;
-  clearSave();  // arranca nuevo, borra cualquier save previo
-  initLevel(1);
+  clearSave();
+  initLevel(twoPlayerMode ? players[0].level : 1);
   if(!loopGo){ loopGo=true; requestAnimationFrame(loop); }
 }
 
@@ -1247,6 +1432,172 @@ function loadSave(){
 function clearSave(){
   if(typeof localStorage === 'undefined') return;
   try { localStorage.removeItem(SAVE_KEY); } catch(e){}
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SCOREBOARD — registro persistente de partidas
+//  Cada partida (terminada o perdida) queda registrada con:
+//    - nombre del jugador
+//    - personaje
+//    - mundo-nivel alcanzado
+//    - total de huesitos
+//    - resultado (won | lost)
+//    - timestamp
+//
+//  Almacenado en localStorage (por dispositivo+navegador).
+//  Si querés un leaderboard global compartido entre dispositivos,
+//  se puede agregar Vercel KV (ver SCORES_REMOTE_URL más abajo).
+// ═══════════════════════════════════════════════════════════════
+const SCORES_KEY = 'sdb_scores_v1';
+const SCORES_MAX = 50;             // máximo de entradas guardadas
+
+// Si se configura una URL de backend remoto (Vercel KV o similar),
+// los scores se enviarán también ahí. Dejarlo en null para usar solo local.
+const SCORES_REMOTE_URL = null;    // ej: '/api/scores'
+
+function getScores(){
+  if(typeof localStorage === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(SCORES_KEY);
+    if(!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : [];
+  } catch(e){ return []; }
+}
+
+function addScore(entry){
+  if(typeof localStorage === 'undefined') return;
+  try {
+    const scores = getScores();
+    scores.push({
+      name: entry.name || 'Anónimo',
+      char: entry.char || 'wiener',
+      world: entry.world || 1,
+      level: entry.level || 1,
+      bones: entry.bones || 0,
+      result: entry.result || 'lost',    // 'won' | 'lost'
+      time: Date.now()
+    });
+    // Ordenar por bones desc y mantener top N
+    scores.sort((a, b) => (b.bones || 0) - (a.bones || 0));
+    if(scores.length > SCORES_MAX) scores.length = SCORES_MAX;
+    localStorage.setItem(SCORES_KEY, JSON.stringify(scores));
+  } catch(e){}
+  // Envío remoto opcional (no bloquea)
+  if(SCORES_REMOTE_URL){
+    try {
+      fetch(SCORES_REMOTE_URL, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(entry)
+      }).catch(()=>{});
+    } catch(e){}
+  }
+}
+
+// Pantalla del leaderboard
+function showScoreboard(){
+  const scores = getScores();
+  const msg = document.getElementById('msg');
+  let rowsHtml = '';
+  if(scores.length === 0){
+    rowsHtml = '<p class="msg-sub" style="color:#888">Todavía no hay partidas registradas.</p>';
+  } else {
+    rowsHtml = `
+      <div style="max-height:280px;overflow-y:auto;margin:12px 0;border:1px solid rgba(255,255,255,0.1);border-radius:6px;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead style="position:sticky;top:0;background:rgba(60,40,80,0.95);color:#ffd34d;">
+            <tr>
+              <th style="padding:8px 6px;text-align:left;">#</th>
+              <th style="padding:8px 6px;text-align:left;">Jugador</th>
+              <th style="padding:8px 6px;text-align:left;">Mundo</th>
+              <th style="padding:8px 6px;text-align:right;">🦴</th>
+              <th style="padding:8px 6px;text-align:center;">Final</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${scores.map((s, i) => {
+              const charName = s.char === 'doverman' ? 'Doberman' : 'Wiener';
+              const result = s.result === 'won'
+                ? '<span style="color:#88e088">✓ Ganó</span>'
+                : '<span style="color:#ff8080">✗ Mundo ' + s.world + '-' + s.level + '</span>';
+              const rowStyle = i < 3 ? 'background:rgba(255,210,80,' + (0.15 - i*0.04) + ');' : '';
+              return `<tr style="${rowStyle}border-bottom:1px solid rgba(255,255,255,0.05);">
+                <td style="padding:6px 6px;color:${i===0?'#ffd34d':i===1?'#c0c0c0':i===2?'#cd7f32':'#aaa'};font-weight:700;">${i+1}</td>
+                <td style="padding:6px 6px;">${escapeHtml(s.name)} <span style="color:#888;font-size:11px">(${charName})</span></td>
+                <td style="padding:6px 6px;color:#a0c0ff;">${s.world}-${s.level}</td>
+                <td style="padding:6px 6px;text-align:right;color:#ffd34d;font-weight:700;">${s.bones}</td>
+                <td style="padding:6px 6px;text-align:center;font-size:11px;">${result}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+  msg.innerHTML = `
+    <div class="msg-card msg-card-win">
+      <h2 class="msg-title">🏆 PUNTAJES</h2>
+      <p class="msg-sub">Mejores partidas guardadas en este dispositivo</p>
+      ${rowsHtml}
+      <div style="display:flex;gap:10px;justify-content:center;margin-top:14px;">
+        <button class="action-btn" id="msg-btn">VOLVER</button>
+        ${scores.length > 0 ? '<button class="action-btn" id="msg-btn-clear" style="background:linear-gradient(180deg,#d04040,#902020);">BORRAR HISTORIAL</button>' : ''}
+      </div>
+    </div>
+  `;
+  msg.classList.remove('hidden');
+  document.getElementById('msg-main').classList.add('hidden');
+  document.getElementById('msg-btn').onclick = () => {
+    msg.classList.add('hidden');
+    document.getElementById('msg-main').classList.remove('hidden');
+    refreshMainMenu();
+  };
+  const clearBtn = document.getElementById('msg-btn-clear');
+  if(clearBtn){
+    clearBtn.onclick = () => {
+      if(confirm('¿Borrar todo el historial de puntajes? Esta acción no se puede deshacer.')){
+        try { localStorage.removeItem(SCORES_KEY); } catch(e){}
+        showScoreboard();
+      }
+    };
+  }
+}
+
+function escapeHtml(s){
+  if(typeof s !== 'string') return '';
+  return s.replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+
+// Registra una partida (llamada desde gameOver o showFinalVictory)
+function recordRun(result){
+  if(twoPlayerMode){
+    // Registrar a cada jugador
+    for(const p of players){
+      addScore({
+        name: p.name,
+        char: p.char,
+        world: p.worldNum,
+        level: p.level,
+        bones: p.totalBonesEarned,
+        result: result === 'won' ? (p.completed ? 'won' : 'lost') : 'lost'
+      });
+    }
+  } else {
+    // Modo solo: usar el nombre del input del menú
+    const nameInput = document.getElementById('p1-name');
+    const playerName = (nameInput && nameInput.value.trim()) || 'Jugador';
+    addScore({
+      name: playerName,
+      char: chosenChar,
+      world: worldNum,
+      level: level,
+      bones: totalBonesEarned,
+      result: result
+    });
+  }
 }
 
 function hasSave(){
@@ -2719,13 +3070,34 @@ function updatePlayer(){
     if(P.deadT > 95){
       lives--;
       if(lives<=0){
-        gameOver = true;
-        showGameOver();
+        // Sin vidas para este jugador
+        if(twoPlayerMode){
+          // Intentar pasar turno al otro
+          const switched = switchPlayerTurn();
+          if(!switched){
+            // Ambos muertos: game over total
+            gameOver = true;
+            showGameOver();
+          }
+          // Si switched, showPlayerSwitchScreen() ya pausó el juego
+        } else {
+          gameOver = true;
+          showGameOver();
+        }
       } else {
         // Conserva munición y huesos
         inSubLevel = false;  // si murió en el subnivel, vuelve al nivel principal
         savedMainState = null;
-        initLevel(level);
+        // En 2P, cada vida perdida cambia el turno (no solo el game over)
+        if(twoPlayerMode){
+          const switched = switchPlayerTurn();
+          if(!switched){
+            // Otro jugador no está disponible: sigue solo este
+            initLevel(level);
+          }
+        } else {
+          initLevel(level);
+        }
       }
     }
     return;
@@ -3099,13 +3471,12 @@ function updateEnemies(){
     if(e.aggressive && e.kind === 'badger'){
       const dxP = P.x - e.x;
       const distP = Math.abs(dxP);
-      // Si el jugador está dentro de 8 tiles, persigue activamente
-      if(distP < 8 * TILE){
+      // Persigue solo si jugador está a menos de 5 tiles (antes 8)
+      if(distP < 5 * TILE){
         e.dir = dxP > 0 ? 1 : -1;
-        // Acelera un poco cuando está persiguiendo
-        e.chaseBoost = Math.min((e.chaseBoost || 0) + 0.02, 0.6);
+        e.chaseBoost = Math.min((e.chaseBoost || 0) + 0.015, 0.35);
       } else {
-        e.chaseBoost = Math.max((e.chaseBoost || 0) - 0.02, 0);
+        e.chaseBoost = Math.max((e.chaseBoost || 0) - 0.03, 0);
       }
     }
     // ─── SALTITOS DE ARDILLAS ───
@@ -4297,8 +4668,10 @@ function updateItems(){
         hud();
         sfxGoldenBone();
       } else if(c.coin){
-        // MONEDA del subnivel cueva: cuenta como hueso pero con efecto distinto
-        bones++; totalBonesEarned++; bonesSinceLastLife++;
+        // MONEDA del subnivel cueva: vale 2 huesitos
+        bones += 2;
+        totalBonesEarned += 2;
+        bonesSinceLastLife += 2;
         if(bonesSinceLastLife >= 100){
           bonesSinceLastLife -= 100; lives++; bones = 0;
           showFloatingText('+1 ♥ EXTRA', P.x+P.w/2, P.y-10, '#ff80a0');
@@ -4309,6 +4682,7 @@ function updateItems(){
           sfxTone(1200, 0.04, {type:'square', vol:0.28});
           sfxTone(1600, 0.06, {type:'square', vol:0.28, delay:0.04});
         }
+        showFloatingText('+2', c.x, c.y, '#ffd34d');
         burst(c.x+5, c.y, '#ffd34d', 8);
         burst(c.x+5, c.y, '#fff', 4);
         hud();
@@ -4891,12 +5265,16 @@ function buildSubLevel4(){
     });
   }
 
-  // TEJONES agresivos — escalado por mundo (más en M2/M3)
-  // Tejón: kind 'badger', type 'jump'. Persigue al jugador cuando está cerca.
-  const badgerCount = worldNum === 1 ? 4 : (worldNum === 2 ? 6 : 8);
-  const badgerSpd = (1.4 + (worldNum-1) * 0.5);   // M1=1.4, M2=1.9, M3=2.4
+  // TEJONES — escalado por mundo. M1=fáciles (lejos, lentos, no persiguen).
+  // Distancia del spawn del jugador (x=2): los primeros tejones aparecen recién
+  // después de x=12, dándole tiempo al jugador a orientarse.
+  const badgerCount = worldNum === 1 ? 3 : (worldNum === 2 ? 5 : 7);
+  const badgerSpd = (1.0 + (worldNum-1) * 0.45);   // M1=1.0, M2=1.45, M3=1.9
+  // Solo M2 y M3 persiguen activamente; M1 patrulla normal.
+  const badgerAggressive = worldNum >= 2;
+  // Spawns ordenados desde lejos hacia más lejos
   const badgerSpawns = [
-    [6, 11], [12, 11], [18, 11], [24, 11], [29, 11],
+    [12, 11], [18, 11], [24, 11], [29, 11],
     [14, 11], [22, 11], [27, 11]
   ].slice(0, badgerCount);
   for(const [bx, by] of badgerSpawns){
@@ -4906,15 +5284,15 @@ function buildSubLevel4(){
       w: 18, h: 14,
       vx: badgerSpd * dir, vy: 0, dir: dir,
       alive: true, dead: false, deadT: 0, fr: 0, ft: 0,
-      type: 'jump', kind: 'badger',
+      type: 'walk', kind: 'badger',     // walk (no jump): más predecible
       baseSpd: badgerSpd,
-      jumpT: 60 + (Math.random() * 60 | 0),
+      jumpT: 999,                        // no saltan
       onGround: false,
       breathT: Math.random() * Math.PI * 2,
       homeX: bx * TILE,
-      patrolRange: 8 * TILE,
+      patrolRange: 5 * TILE,             // patrullaje limitado, menos invasivo
       tailT: Math.random() * Math.PI * 2,
-      aggressive: true        // tejones persiguen activamente
+      aggressive: badgerAggressive       // M1 NO persigue, M2/M3 sí
     });
   }
 
@@ -8638,6 +9016,7 @@ function showMsg(title, sub, btnLabel, cb){
 function showGameOver(){
   loopGo = false;
   stopMusic();
+  recordRun('lost');   // registrar la partida perdida en el scoreboard
   clearSave();   // game over: borrar save (debe empezar de cero)
   const totalBones = totalBonesEarned;
   // ammo + bones reset on full game-over (3 lives lost)
@@ -9039,6 +9418,13 @@ function drawBambyPortrait(g){
 function showFinalVictory(){
   loopGo = false;
   stopMusic();
+  // Marcar jugadores como completados (2P) y registrar la victoria
+  if(twoPlayerMode){
+    for(const p of players){
+      if(p.alive) p.completed = true;
+    }
+  }
+  recordRun('won');
   clearSave();   // se completó el juego: borrar save
   const totalBones = totalBonesEarned;
   const heroName = chosenChar === 'wiener' ? 'Wiener' : 'Salchi-Doverman';
@@ -9303,12 +9689,46 @@ document.addEventListener('DOMContentLoaded', () => {
   const defaultCard = document.querySelector('.char-card[data-char="wiener"]');
   if(defaultCard) defaultCard.classList.add('selected');
 
+  // ───── Selector de modo 1P/2P ─────
+  let selectedMode = '1p';   // por defecto
+  const mode1pBtn = document.getElementById('mode-1p');
+  const mode2pBtn = document.getElementById('mode-2p');
+  const p2NameRow = document.getElementById('p2-name-row');
+  const charTitle = document.getElementById('char-title');
+  function updateModeUI(){
+    if(mode1pBtn) mode1pBtn.classList.toggle('selected', selectedMode === '1p');
+    if(mode2pBtn) mode2pBtn.classList.toggle('selected', selectedMode === '2p');
+    if(p2NameRow){
+      p2NameRow.style.display = selectedMode === '2p' ? 'flex' : 'none';
+    }
+    if(charTitle){
+      charTitle.textContent = selectedMode === '2p'
+        ? 'Elegí tu héroe (Jugador 1)'
+        : 'Elegí tu héroe';
+    }
+  }
+  if(mode1pBtn) mode1pBtn.addEventListener('click', () => { selectedMode = '1p'; updateModeUI(); });
+  if(mode2pBtn) mode2pBtn.addEventListener('click', () => { selectedMode = '2p'; updateModeUI(); });
+
   // start button
   const startBtn = document.getElementById('btn-start');
   if(startBtn){
     startBtn.addEventListener('click', () => {
       document.getElementById('msg-main').classList.add('hidden');
-      startGame();
+      const p1Name = (document.getElementById('p1-name').value || 'Jugador 1').trim();
+      const p2Name = (document.getElementById('p2-name').value || 'Jugador 2').trim();
+      // En 2P: el jugador 2 toma automáticamente el personaje opuesto
+      const p1Char = chosenChar;
+      const p2Char = p1Char === 'wiener' ? 'doverman' : 'wiener';
+      if(selectedMode === '2p'){
+        startGame({
+          twoPlayer: true,
+          p1Name: p1Name, p1Char: p1Char,
+          p2Name: p2Name, p2Char: p2Char
+        });
+      } else {
+        startGame();
+      }
     });
   }
   // continue button (sólo visible si hay save)
@@ -9317,6 +9737,13 @@ document.addEventListener('DOMContentLoaded', () => {
     continueBtn.addEventListener('click', () => {
       document.getElementById('msg-main').classList.add('hidden');
       continueGame();
+    });
+  }
+  // scores button
+  const scoresBtn = document.getElementById('btn-scores');
+  if(scoresBtn){
+    scoresBtn.addEventListener('click', () => {
+      showScoreboard();
     });
   }
   // Mostrar info de save y botón continuar si hay partida guardada
