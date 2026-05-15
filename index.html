@@ -341,7 +341,6 @@ button.action-btn.secondary{
 <!-- ═══════════ Menú principal ═══════════ -->
 <div id="msg-main" class="overlay">
   <h1>★ SUPER DACHSHUND BROS ★</h1>
-  <p class="sub">¡Recoge huesos, aplasta gatos, vence al Gato Rey y supera Nordeltopolis!</p>
   <h2>Elegí tu héroe</h2>
   <div id="char-select">
     <div class="char-card" data-char="wiener">
@@ -363,9 +362,10 @@ button.action-btn.secondary{
     <div><span>Saltar encima</span> Aplastar enemigos</div>
     <div><span>X</span> Disparar</div>
     <div><span>Bloque ?</span> Golpear desde abajo</div>
+    <div><span>S</span> Guardar partida</div>
     <div><span>P</span> Pausa</div>
+    <div><span>M</span> Mutear música</div>
   </div>
-  <p class="hint">3 MUNDOS × 5 NIVELES — Pradera · Caverna · Wonder Wiener · Nordeltopolis · Pantano. Mundo 2 TÉTRICO, Mundo 3 FRENÉTICO.</p>
   <div id="save-info" style="display:none; margin:8px 0 12px 0; padding:10px 14px; background:rgba(120,220,140,0.12); border:1px solid rgba(120,220,140,0.4); border-radius:8px; color:#a0f0b0; font-size:13px;">
     <strong style="color:#88e088">💾 Partida guardada:</strong>
     <span id="save-info-text"></span>
@@ -446,6 +446,13 @@ document.addEventListener('keydown', e => {
   }
   if(e.code==='KeyM' || e.key==='m' || e.key==='M'){
     toggleMusic();
+  }
+  // Guardar manual con tecla S (también baja al subnivel, ambas acciones son compatibles)
+  if(e.code==='KeyS' || e.key==='s' || e.key==='S'){
+    if(loopGo && !gameOver && !won && level !== 0 && !inSubLevel){
+      // Solo guardar si la partida está activa, no estamos en subnivel ni en transición
+      manualSave();
+    }
   }
   if(['Space','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.code)) e.preventDefault();
 });
@@ -567,7 +574,8 @@ let levelTransitioning = false;
 let inSubLevel = false;       // si está dentro del subnivel Bubble Bobble
 let subLevelReturnX = 0;      // X del nivel principal donde regresar
 let subLevelReturnY = 0;
-let subLevelUsed = false;     // una sola vez por partida
+let subLevelUsed = false;     // una sola vez por partida (subnivel 1 - Bubble Bobble)
+let subLevel4Used = false;    // subnivel 4 (cueva atajo de Nordeltopolis) por mundo
 let savedMainState = null;    // snapshot del nivel principal al entrar al subnivel
 let worldNum = 1;             // 1, 2 o 3 — selecciona modificadores globales
 let enemySpeedMul = 1.0;      // multiplicador aplicado al baseSpd de todos los enemigos al construir el nivel
@@ -1169,6 +1177,7 @@ function startGame(){
   worldNum = 1;
   enemySpeedMul = 1.0;
   subLevelUsed = false;
+  subLevel4Used = false;
   inSubLevel = false;
   savedMainState = null;
   clearSave();  // arranca nuevo, borra cualquier save previo
@@ -1184,7 +1193,7 @@ function startGame(){
 const SAVE_KEY = 'sdb_save_v1';
 
 function saveGame(){
-  if(typeof localStorage === 'undefined') return;
+  if(typeof localStorage === 'undefined') return false;
   try {
     const data = {
       v: 1,
@@ -1200,7 +1209,24 @@ function saveGame(){
       timestamp: Date.now()
     };
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
-  } catch(e){ /* localStorage puede fallar en modo privado */ }
+    return true;
+  } catch(e){ return false; }
+}
+
+// Guardado manual con feedback visual y de audio (tecla S)
+function manualSave(){
+  const ok = saveGame();
+  if(ok){
+    showFloatingText('💾 PARTIDA GUARDADA', P.x + P.w/2, P.y - 18, '#88e088');
+    // Burst de partículas verdes
+    burst(P.x + P.w/2, P.y + 4, '#88e088', 14);
+    burst(P.x + P.w/2, P.y + 4, '#a0f0b0', 8);
+    // Sonido confirmación corto (dos notas ascendentes)
+    sfxTone(660, 0.06, {type:'square', vol:0.28});
+    sfxTone(880, 0.10, {type:'square', vol:0.30, delay:0.06});
+  } else {
+    showFloatingText('No se pudo guardar', P.x + P.w/2, P.y - 18, '#ff8080');
+  }
 }
 
 function loadSave(){
@@ -2151,6 +2177,12 @@ function buildLevel4(){
   tiles=[]; enemies=[]; items=[]; parts=[];
   window._flagX = 99999999;
   window._artifacts = [];
+  // Hot-spot secreto: entrada al subnivel 4 (cueva atajo)
+  // Sin indicador visual. El jugador descubre el punto.
+  window._cave4EntryX = null;
+  window._cave4EntryY = null;
+  window._cave4ExitX = null;
+  window._cave4ExitY = null;
   // Hay agua: si caes en ella, mueres
   water = { y: 12*TILE, surfaceY: 11*TILE + 6 };
 
@@ -2304,6 +2336,13 @@ function buildLevel4(){
       waterY: water.surfaceY - 12
     });
   });
+  // Hot-spot secreto del subnivel 4 (cueva atajo de Nordeltopolis):
+  // Sobre la isla 12-17 (centro x=15) — el jugador debe descubrirlo solo.
+  // Solo activo si todavía no se usó en este mundo.
+  if(!subLevel4Used){
+    window._cave4EntryX = 15*TILE + TILE/2;   // centro de tile 15
+    window._cave4EntryY = 11*TILE;            // tope de la isla
+  }
   applyWorldModifiers();
   removeBlockedItems();
 }
@@ -3056,6 +3095,19 @@ function updateEnemies(){
         e.jumpT = 80 + (Math.random()*70|0);
       }
     }
+    // ─── TEJÓN AGRESIVO: persigue al jugador en distancia corta ───
+    if(e.aggressive && e.kind === 'badger'){
+      const dxP = P.x - e.x;
+      const distP = Math.abs(dxP);
+      // Si el jugador está dentro de 8 tiles, persigue activamente
+      if(distP < 8 * TILE){
+        e.dir = dxP > 0 ? 1 : -1;
+        // Acelera un poco cuando está persiguiendo
+        e.chaseBoost = Math.min((e.chaseBoost || 0) + 0.02, 0.6);
+      } else {
+        e.chaseBoost = Math.max((e.chaseBoost || 0) - 0.02, 0);
+      }
+    }
     // ─── SALTITOS DE ARDILLAS ───
     if(e.kind === 'squirrel'){
       e.jumpT--;
@@ -3066,7 +3118,8 @@ function updateEnemies(){
     }
 
     // ─── MOVER X CON CHEQUEO DE PARED ───
-    const moveX = e.dir * e.baseSpd * speedMod;
+    const chaseAdd = (e.chaseBoost || 0);
+    const moveX = e.dir * (e.baseSpd + chaseAdd) * speedMod;
     e.x += moveX;
     for(const t of tiles){
       if(!SOLID.has(t.t)) continue;
@@ -4155,6 +4208,7 @@ function triggerBossDefeatTransition(){
       showWorldComplete(finishedWorld, ()=>{
         worldNum = finishedWorld + 1;
         subLevelUsed = false;
+        subLevel4Used = false;
         inSubLevel = false;
         savedMainState = null;
         loopGo = true;
@@ -4242,6 +4296,22 @@ function updateItems(){
         showFloatingText('+5', c.x, c.y, '#ffd34d');
         hud();
         sfxGoldenBone();
+      } else if(c.coin){
+        // MONEDA del subnivel cueva: cuenta como hueso pero con efecto distinto
+        bones++; totalBonesEarned++; bonesSinceLastLife++;
+        if(bonesSinceLastLife >= 100){
+          bonesSinceLastLife -= 100; lives++; bones = 0;
+          showFloatingText('+1 ♥ EXTRA', P.x+P.w/2, P.y-10, '#ff80a0');
+          burst(P.x+P.w/2, P.y, '#ff6080', 22, 1.4);
+          sfxOneUp();
+        } else {
+          // Sonido de moneda (dos tonos altos rápidos)
+          sfxTone(1200, 0.04, {type:'square', vol:0.28});
+          sfxTone(1600, 0.06, {type:'square', vol:0.28, delay:0.04});
+        }
+        burst(c.x+5, c.y, '#ffd34d', 8);
+        burst(c.x+5, c.y, '#fff', 4);
+        hud();
       } else {
         // Hueso normal: cuenta para el contador "bones" visible
         bones++; totalBonesEarned++; bonesSinceLastLife++;
@@ -4455,8 +4525,7 @@ function checkSubLevelEntry(){
   if(P.dead || won || levelTransitioning) return;
   if(!downTap) return;
 
-  // ENTRADA: parado encima de la boca de incendio del nivel 1
-  // Sólo si no se usó ya el subnivel en esta partida.
+  // ENTRADA al subnivel 1 (Bubble Bobble): nivel 1, 5° boca de incendio
   if(level === 1 && !inSubLevel && !subLevelUsed && window._pipeEntryX != null){
     const cx = window._pipeEntryX;
     const cy = window._pipeEntryTopY;
@@ -4466,7 +4535,18 @@ function checkSubLevelEntry(){
       enterSubLevel1();
     }
   }
-  // SALIDA: parado en el caño de salida dentro del subnivel
+  // ENTRADA al subnivel 4 (Cueva atajo de Nordeltopolis)
+  // Hot-spot secreto sobre una isla específica. Sin indicador visual.
+  if(level === 4 && !inSubLevel && !subLevel4Used && window._cave4EntryX != null){
+    const cx = window._cave4EntryX;
+    const cy = window._cave4EntryY;
+    const playerCenterX = P.x + P.w/2;
+    const playerFootY = P.y + P.h;
+    if(P.onGround && Math.abs(playerCenterX - cx) < TILE && Math.abs(playerFootY - cy) < 8){
+      enterSubLevel4();
+    }
+  }
+  // SALIDA del subnivel 1: caño verde dentro del subnivel
   if(inSubLevel && window._pipeExitX != null){
     const cx = window._pipeExitX;
     const cy = window._pipeExitY;
@@ -4474,6 +4554,16 @@ function checkSubLevelEntry(){
     const playerFootY = P.y + P.h;
     if(P.onGround && Math.abs(playerCenterX - cx) < TILE && Math.abs(playerFootY - cy) < 8){
       exitSubLevel1();
+    }
+  }
+  // SALIDA del subnivel 4: portal al final de la cueva
+  if(inSubLevel && window._cave4ExitX != null){
+    const cx = window._cave4ExitX;
+    const cy = window._cave4ExitY;
+    const playerCenterX = P.x + P.w/2;
+    const playerFootY = P.y + P.h;
+    if(P.onGround && Math.abs(playerCenterX - cx) < TILE && Math.abs(playerFootY - cy) < 8){
+      exitSubLevel4();
     }
   }
 }
@@ -4636,6 +4726,211 @@ function buildSubLevel1(){
   removeBlockedItems();
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  SUBNIVEL 4 — CUEVA ATAJO DE NORDELTOPOLIS
+//  Secreto: sin indicador. Entrada en x=15*TILE del nivel 4.
+//  Avanzar comiendo MONEDAS, esquivando tejones agresivos.
+//  Salida = portal que devuelve al jugador cerca del final del nivel 4.
+//  Misma lógica de un solo uso que el subnivel 1.
+// ═══════════════════════════════════════════════════════════════
+function enterSubLevel4(){
+  // Snapshot completo del nivel principal
+  savedMainState = {
+    tiles: tiles.map(t => ({...t})),
+    enemies: enemies.map(e => ({...e})),
+    items: items.map(i => ({...i})),
+    parts: [],
+    bones: bones,
+    shots: shots,
+    camX: cam.x,
+    flagX: window._flagX,
+    waterCopy: water ? {...water} : null,
+    artifactsCopy: window._artifacts ? window._artifacts.map(a => ({...a})) : [],
+    // Punto de retorno (atajo cerca del final del nivel)
+    // Lo definimos al salir, no al entrar
+    isSubLevel4: true
+  };
+  inSubLevel = true;
+  subLevel4Used = true;   // un solo uso por partida (no resetea al respawn)
+  buildSubLevel4();
+  bgDirty = true;
+  hud();
+}
+
+function exitSubLevel4(){
+  if(!savedMainState || !savedMainState.isSubLevel4) return;
+  // Restaurar estado completo del nivel 4
+  tiles = savedMainState.tiles.map(t => ({...t}));
+  enemies = savedMainState.enemies.map(e => ({...e}));
+  items = savedMainState.items.map(i => ({...i}));
+  parts = [];
+  playerBullets = [];
+  bones = savedMainState.bones;
+  // shots: conservar la munición ganada (no se resetea)
+  window._flagX = savedMainState.flagX;
+  water = savedMainState.waterCopy ? {...savedMainState.waterCopy} : null;
+  window._artifacts = savedMainState.artifactsCopy.map(a => ({...a}));
+  // Re-establecer hot-spot — pero como subLevel4Used = true, no se podrá reentrar
+  window._cave4EntryX = null;
+  window._cave4EntryY = null;
+  window._cave4ExitX = null;
+  window._cave4ExitY = null;
+
+  inSubLevel = false;
+  savedMainState = null;
+  // ATAJO: aparece cerca del FINAL del nivel 4
+  // _flagX = 191*TILE → spawn en isla cercana (x=170*TILE aprox, debe haber isla sólida)
+  // Las islas en el nivel 4: vemos que hay islas hasta x≈187. Posicionamos en x=170.
+  // Buscar una isla sólida cerca de x=170 para no spawn sobre agua.
+  let spawnTileX = 170;
+  // Validar que haya tile sólido en (spawnTileX, 11)
+  let foundSolid = false;
+  for(const t of tiles){
+    if(SOLID.has(t.t) && t.y === 11*TILE){
+      const tx = t.x / TILE;
+      if(Math.abs(tx - spawnTileX) <= 4){
+        spawnTileX = tx;
+        foundSolid = true;
+        break;
+      }
+    }
+  }
+  if(!foundSolid){
+    // Fallback: buscar la isla más cercana al final
+    let bestX = 10;
+    for(const t of tiles){
+      if(SOLID.has(t.t) && t.y === 11*TILE){
+        const tx = t.x / TILE;
+        if(tx > bestX && tx < 185) bestX = tx;
+      }
+    }
+    spawnTileX = bestX;
+  }
+  P.x = spawnTileX * TILE + 4;
+  P.y = 10*TILE - P.h;
+  P.vx = 0; P.vy = 0;
+  cam.x = Math.max(0, P.x - CW/2);
+  bgDirty = true;
+  hud();
+  // Efecto visual de salida
+  burst(P.x + P.w/2, P.y + P.h/2, '#a0c890', 18);
+  burst(P.x + P.w/2, P.y + P.h/2, '#ffd34d', 12);
+  sfxTone(440, 0.08, {type:'square', vol:0.3});
+  sfxTone(660, 0.10, {type:'square', vol:0.3, delay:0.06});
+  sfxTone(880, 0.14, {type:'triangle', vol:0.3, delay:0.12});
+}
+
+function buildSubLevel4(){
+  tiles = []; enemies = []; items = []; parts = [];
+  playerBullets = [];
+  window._flagX = 99999999;       // sin bandera, salida es el portal
+  window._princess = null;
+  window._artifacts = [];
+  window._pipeEntryX = null;
+  window._pipeExitX = null;
+  water = null;
+
+  // Cueva 36 tiles ancho × 14 alto. Es un pasaje largo, no recinto cerrado.
+  const SW = 36, SH = 14;
+  // Suelo (continuo de roca)
+  for(let x=0; x<SW; x++){
+    T(x, SH-1, 'stone');
+    T(x, SH-2, 'dngnd');
+  }
+  // Techo
+  for(let x=0; x<SW; x++){
+    T(x, 0, 'stone');
+    T(x, 1, 'stone');
+  }
+  // Paredes laterales
+  for(let y=2; y<SH-2; y++){
+    T(0, y, 'stone');
+    T(SW-1, y, 'stone');
+  }
+  // Plataformas internas — variadas alturas, sirve para esquivar tejones
+  // y para colocar las monedas estratégicamente
+  const platforms = [
+    [4, 8, 8],     // [xStart, xEnd, y]
+    [12, 15, 6],
+    [18, 22, 8],
+    [25, 28, 6],
+    [10, 12, 9],
+    [20, 23, 9],
+    [29, 32, 8]
+  ];
+  for(const [xs, xe, y] of platforms){
+    for(let x=xs; x<=xe; x++) T(x, y, 'sld');
+  }
+
+  // Estalactitas decorativas (no sólidas)
+  [3, 8, 14, 19, 24, 30].forEach(x => {
+    tiles.push({x:x*TILE, y:2*TILE, w:TILE, h:TILE, t:'stalac', hit:false});
+  });
+
+  // MONEDAS — distribuidas para incentivar avance horizontal.
+  // Cada moneda da +1 hueso pero con sprite y sonido distintos (item.coin = true).
+  const coinPositions = [
+    [2, 10], [3, 10], [4, 10],
+    [5, 7], [6, 7],
+    [9, 10], [10, 10],
+    [11, 5], [13, 5], [14, 5],
+    [16, 10], [17, 10], [18, 10],
+    [19, 7], [20, 7], [21, 7],
+    [22, 10], [23, 10],
+    [25, 5], [26, 5], [27, 5],
+    [28, 10], [29, 10],
+    [30, 7], [31, 7],
+    [32, 10], [33, 10], [34, 10]
+  ];
+  for(const [x, y] of coinPositions){
+    items.push({
+      x: x*TILE + 8, y: y*TILE + 4,
+      w: 10, h: 12,
+      alive: true, ft: 0, popup: false,
+      coin: true
+    });
+  }
+
+  // TEJONES agresivos — escalado por mundo (más en M2/M3)
+  // Tejón: kind 'badger', type 'jump'. Persigue al jugador cuando está cerca.
+  const badgerCount = worldNum === 1 ? 4 : (worldNum === 2 ? 6 : 8);
+  const badgerSpd = (1.4 + (worldNum-1) * 0.5);   // M1=1.4, M2=1.9, M3=2.4
+  const badgerSpawns = [
+    [6, 11], [12, 11], [18, 11], [24, 11], [29, 11],
+    [14, 11], [22, 11], [27, 11]
+  ].slice(0, badgerCount);
+  for(const [bx, by] of badgerSpawns){
+    const dir = Math.random() > 0.5 ? 1 : -1;
+    enemies.push({
+      x: bx * TILE, y: by * TILE - 14,
+      w: 18, h: 14,
+      vx: badgerSpd * dir, vy: 0, dir: dir,
+      alive: true, dead: false, deadT: 0, fr: 0, ft: 0,
+      type: 'jump', kind: 'badger',
+      baseSpd: badgerSpd,
+      jumpT: 60 + (Math.random() * 60 | 0),
+      onGround: false,
+      breathT: Math.random() * Math.PI * 2,
+      homeX: bx * TILE,
+      patrolRange: 8 * TILE,
+      tailT: Math.random() * Math.PI * 2,
+      aggressive: true        // tejones persiguen activamente
+    });
+  }
+
+  // PORTAL de salida al final de la cueva (x=33, sobre el suelo)
+  // Es un portal verde luminoso. Al pisarlo + ↓ se sale.
+  window._cave4ExitX = 33*TILE + TILE/2;
+  window._cave4ExitY = (SH-2)*TILE;
+
+  // Posicionar al jugador al inicio de la cueva
+  P.x = 2 * TILE;
+  P.y = (SH-3) * TILE - P.h;
+  P.vx = 0; P.vy = 0;
+  cam.x = 0;
+  removeBlockedItems();
+}
+
 function checkFlag(){
   if(P.dead || won || levelTransitioning) return;
   if(P.x + P.w > window._flagX && P.x < window._flagX + 8){
@@ -4660,6 +4955,7 @@ function checkFlag(){
       showWorldComplete(finishedWorld, ()=>{
         worldNum = finishedWorld + 1;
         subLevelUsed = false;
+        subLevel4Used = false;
         inSubLevel = false;
         savedMainState = null;
         loopGo = true;
@@ -5236,7 +5532,42 @@ function renderBG5(c){
   }
 }
 function renderBGSub(c){
-  // Mazmorra estilo Bubble Bobble — fondo violeta-azul oscuro con estrellitas/burbujas
+  if(level === 4){
+    // Subnivel 4: CUEVA DE ROCA marrón oscura con goteras
+    const g = c.createLinearGradient(0, 0, 0, CH);
+    g.addColorStop(0, '#2a1808');
+    g.addColorStop(0.5, '#3a2010');
+    g.addColorStop(1, '#150a04');
+    c.fillStyle = g;
+    c.fillRect(0, 0, CW, CH);
+    // Vetas de roca decorativas
+    c.strokeStyle = 'rgba(120,80,40,0.18)';
+    c.lineWidth = 1;
+    for(let i=0;i<14;i++){
+      const sx = (i*73 + 22) % CW;
+      const sy = (i*41 + 18) % CH;
+      c.beginPath();
+      c.moveTo(sx, sy);
+      c.lineTo(sx + 40 + (i%3)*20, sy + 10);
+      c.stroke();
+    }
+    // Cristales brillantes ocasionales
+    c.fillStyle = 'rgba(180,140,80,0.25)';
+    for(let i=0;i<12;i++){
+      const sx = (i*61 + 31) % CW;
+      const sy = (i*37 + 14) % CH;
+      c.fillRect(sx, sy, 2, 2);
+    }
+    // Gotitas muy sutiles cayendo
+    c.fillStyle = 'rgba(200,220,255,0.12)';
+    for(let i=0;i<8;i++){
+      const sx = (i*89 + 17) % CW;
+      const sy = (i*53 + 9) % (CH*0.6);
+      c.fillRect(sx, sy, 1, 3);
+    }
+    return;
+  }
+  // Subnivel 1 (Bubble Bobble) — fondo violeta-azul oscuro
   const g = c.createLinearGradient(0, 0, 0, CH);
   g.addColorStop(0, '#1a0838');
   g.addColorStop(0.5, '#28104a');
@@ -5932,6 +6263,7 @@ function drawEnemy(e){
   else if(e.kind === 'seagull') drawSeagull(e, x, y);
   else if(e.kind === 'sparrow') drawSparrow(e, x, y);
   else if(e.kind === 'rat') drawRat(e, x, y);
+  else if(e.kind === 'badger') drawBadger(e, x, y);
   else if(e.kind === 'capi') drawCapincho(e, x, y);
   else if(e.kind === 'squirrel') drawSquirrel(e, x, y);
   else drawCat(e, x, y);
@@ -6951,6 +7283,118 @@ function drawRat(e, x, y){
   ctx.restore();
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  RENDER — TEJÓN (subnivel 4 cueva)
+//  Cuerpo blanco-gris con franjas negras características en la cara.
+// ═══════════════════════════════════════════════════════════════
+function drawBadger(e, x, y){
+  if(e.dead){
+    ctx.fillStyle = '#888';
+    ctx.fillRect(x+2, y+e.h*0.4, e.w-4, e.h*0.5);
+    return;
+  }
+  e.breathT = (e.breathT || 0) + 0.08;
+  const bob = Math.sin(e.breathT) * 0.6;
+
+  ctx.save();
+  if(e.dir < 0){
+    ctx.translate(x + e.w, 0);
+    ctx.scale(-1, 1);
+    x = 0;
+  } else {
+    ctx.translate(x, 0);
+    x = 0;
+  }
+
+  // Sombra
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(x+e.w/2, y+e.h+0.5, e.w/2-1, 1.5, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // Cuerpo gris alargado
+  ctx.fillStyle = '#9a9a9a';
+  ctx.beginPath();
+  ctx.roundRect(x+1, y+e.h*0.4 + bob, e.w-2, e.h*0.55, 3);
+  ctx.fill();
+  // Lomo más oscuro (banda)
+  ctx.fillStyle = '#4a4a4a';
+  ctx.fillRect(x+2, y+e.h*0.4 + bob, e.w-4, 2);
+  // Panza más clara
+  ctx.fillStyle = '#d0d0d0';
+  ctx.fillRect(x+3, y+e.h*0.7 + bob, e.w-6, 3);
+
+  // Cabeza con franjas blancas y negras (sello del tejón)
+  const headX = x + e.w*0.6;
+  const headY = y + bob;
+  // Cráneo blanco
+  ctx.fillStyle = '#f0f0f0';
+  ctx.beginPath();
+  ctx.roundRect(headX, headY, e.w*0.4, e.h*0.55, 3);
+  ctx.fill();
+  // Franja negra superior (de la nariz hacia atrás, encima del ojo)
+  ctx.fillStyle = '#1a1a1a';
+  ctx.beginPath();
+  ctx.moveTo(headX - 1, headY + 1);
+  ctx.lineTo(headX + e.w*0.42, headY + 1);
+  ctx.lineTo(headX + e.w*0.42, headY + 4);
+  ctx.lineTo(headX - 1, headY + 3);
+  ctx.fill();
+  // Franja negra inferior (debajo del ojo)
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillRect(headX - 1, headY + e.h*0.32, 4, 2);
+
+  // Hocico negro
+  ctx.fillStyle = '#1a1a1a';
+  ctx.beginPath();
+  ctx.roundRect(headX + e.w*0.3, headY + e.h*0.2, e.w*0.12, e.h*0.18, 1.5);
+  ctx.fill();
+
+  // Ojo (más feroz cuando aggressive)
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(headX + e.w*0.12, headY + e.h*0.18, 2, 2);
+  ctx.fillStyle = e.aggressive ? '#ff2030' : '#1a1a1a';
+  ctx.fillRect(headX + e.w*0.14, headY + e.h*0.2, 1.2, 1.2);
+
+  // Orejas pequeñas redondas
+  ctx.fillStyle = '#5a5a5a';
+  ctx.beginPath();
+  ctx.arc(headX + 1, headY - 0.5, 1.8, 0, Math.PI*2);
+  ctx.arc(headX + e.w*0.32, headY - 0.5, 1.8, 0, Math.PI*2);
+  ctx.fill();
+  // Interior orejas rosa
+  ctx.fillStyle = '#ffaab0';
+  ctx.beginPath();
+  ctx.arc(headX + 1, headY - 0.3, 0.8, 0, Math.PI*2);
+  ctx.arc(headX + e.w*0.32, headY - 0.3, 0.8, 0, Math.PI*2);
+  ctx.fill();
+
+  // Dientes (asoman cuando es agresivo)
+  if(e.aggressive){
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.moveTo(headX + e.w*0.32, headY + e.h*0.32);
+    ctx.lineTo(headX + e.w*0.36, headY + e.h*0.45);
+    ctx.lineTo(headX + e.w*0.4, headY + e.h*0.32);
+    ctx.fill();
+  }
+
+  // Patitas animadas
+  const legCycle = Math.sin(e.breathT * 4) * 1.2;
+  ctx.fillStyle = '#3a3a3a';
+  ctx.fillRect(x+2, y+e.h-3 + legCycle, 3, 3 - Math.abs(legCycle*0.5));
+  ctx.fillRect(x+e.w-5, y+e.h-3 - legCycle, 3, 3 - Math.abs(legCycle*0.5));
+  ctx.fillRect(x+e.w/2-2, y+e.h-3 + legCycle*0.5, 3, 3);
+
+  // Cola corta peluda
+  ctx.fillStyle = '#7a7a7a';
+  ctx.beginPath();
+  ctx.ellipse(x, y+e.h*0.55 + bob, 2.5, 2, -0.3, 0, Math.PI*2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
 
 function drawBoss(){
   if(!boss || !boss.alive) return;
@@ -7264,6 +7708,54 @@ function drawLifeItem(c){
   ctx.shadowBlur = 0;
   ctx.fillStyle = '#ff80a0';
   ctx.fillRect(x+2, y+2+bob, 2, 1);
+}
+
+// Moneda dorada giratoria (subnivel 4 cueva)
+function drawCoin(c){
+  const x = c.x - cam.x, y = c.y;
+  if(x < -16 || x > CW + 16) return;
+  c.ft = (c.ft || 0) + 1;
+  const bob = Math.sin(c.ft*0.1) * 2;
+  // Animación de rotación: ancho varía 0→10 en ciclo de 60 frames
+  const rotPhase = (c.ft % 60) / 60;
+  const w = Math.abs(Math.sin(rotPhase * Math.PI*2)) * 8 + 2;
+  const cx = x + 5;
+  const cy = y + 6 + bob;
+
+  // Glow
+  ctx.shadowColor = 'rgba(255,210,80,0.6)';
+  ctx.shadowBlur = 6;
+  // Cara de la moneda (elipse plana)
+  ctx.fillStyle = '#ffd34d';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, w/2 + 1, 6, 0, 0, Math.PI*2);
+  ctx.fill();
+  // Anillo borde dorado oscuro
+  ctx.fillStyle = '#a06010';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, w/2 + 1, 6, 0, 0, Math.PI*2);
+  ctx.lineWidth = 0.8;
+  ctx.strokeStyle = '#a06010';
+  ctx.stroke();
+  // Cara interna más clara
+  if(w > 3){
+    ctx.fillStyle = '#ffea50';
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, w/2 - 0.8, 4.5, 0, 0, Math.PI*2);
+    ctx.fill();
+    // Símbolo $ en el centro si está bien orientada
+    if(w > 6){
+      ctx.fillStyle = '#a06010';
+      ctx.font = 'bold 8px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('$', cx, cy + 3);
+      ctx.textAlign = 'left';
+    }
+  }
+  // Brillo superior
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.fillRect(cx - w/4, cy - 4, w/2, 1);
+  ctx.shadowBlur = 0;
 }
 
 function drawSkateboardItem(){
@@ -7882,13 +8374,15 @@ function render(){
   drawArtifacts();
   drawPrincess();
 
-  // items (bones / golden / life)
+  // items (bones / golden / life / coin)
   for(const it of items){
     if(it.x + 14 < camLeft || it.x > camRight) continue;
     if(it.life){
       drawLifeItem(it);
     } else if(it.golden){
       drawGoldenBone(it);
+    } else if(it.coin){
+      drawCoin(it);
     } else {
       drawBone(it);
     }
@@ -7905,6 +8399,42 @@ function render(){
     drawBoss();
   }
   drawBossProjectiles();
+
+  // Portal de salida del subnivel 4 (cueva atajo)
+  if(inSubLevel && window._cave4ExitX != null){
+    const px = window._cave4ExitX - cam.x;
+    const py = window._cave4ExitY;
+    if(px > -40 && px < CW + 40){
+      const pulse = 0.5 + Math.sin(fc*0.15)*0.5;
+      // Halo amplio
+      ctx.fillStyle = `rgba(160,255,140,${0.18 + pulse*0.18})`;
+      ctx.beginPath();
+      ctx.arc(px, py - 20, 28, 0, Math.PI*2);
+      ctx.fill();
+      // Cuerpo del portal (óvalo vertical)
+      ctx.fillStyle = `rgba(80,220,120,${0.55 + pulse*0.3})`;
+      ctx.beginPath();
+      ctx.ellipse(px, py - 20, 12, 22, 0, 0, Math.PI*2);
+      ctx.fill();
+      // Núcleo brillante
+      ctx.fillStyle = `rgba(220,255,200,${0.6 + pulse*0.3})`;
+      ctx.beginPath();
+      ctx.ellipse(px, py - 20, 5, 14, 0, 0, Math.PI*2);
+      ctx.fill();
+      // Partículas mágicas que salen
+      if(fc % 4 === 0){
+        const ang = Math.random() * Math.PI*2;
+        parts.push({
+          x: px + Math.cos(ang)*10,
+          y: py - 20 + Math.sin(ang)*16,
+          vx: Math.cos(ang)*0.6,
+          vy: -1.2 + Math.random()*0.5,
+          col: '#a0f0c0',
+          life: 24, ml: 30, sz: 1.5
+        });
+      }
+    }
+  }
 
   // dog
   if(P && !P.dead){
@@ -8041,6 +8571,7 @@ function step(){
       updateBossProjectiles();
       updateParts();
       updateArtifacts();
+      checkSubLevelEntry();           // subnivel 4 (cueva de Nordeltopolis) o salida
       checkFlag();
     }
   } else {
