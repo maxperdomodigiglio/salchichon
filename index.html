@@ -1793,15 +1793,24 @@ function initLevel(lvl){
   water = null;
   platforms = [];
   projectiles = [];
+  window._powerLines = null;     // cables solo en gallinero (n3 M2/M3)
 
   // Configurar multiplicador de velocidad de enemigos según el mundo
   if(worldNum === 2) enemySpeedMul = 2.0;
   else if(worldNum === 3) enemySpeedMul = 2.5;
   else enemySpeedMul = 1.0;
+  // Ajuste fino: 2-2 es la caverna del mundo tétrico, sentía demasiado rápida.
+  // Bajamos 5% específico para ese nivel.
+  if(worldNum === 2 && lvl === 2) enemySpeedMul *= 0.95;
 
   if(lvl===1) buildLevel1();
   else if(lvl===2) buildLevel2();
-  else if(lvl===3) buildLevel3();
+  else if(lvl===3){
+    // Mundo 1: Wonder Wiener tropical (patineta + gaviotas)
+    // Mundos 2/3: GALLINERO (gallinas, pollitos, gaviotas posadas, ardillas en cables)
+    if(worldNum === 1) buildLevel3();
+    else buildLevel3Henhouse();
+  }
   else if(lvl===4) buildLevel4();
   else if(lvl===5) buildLevel5();
   hud();
@@ -2612,6 +2621,264 @@ function buildLevel3(){
       homeX: ex*TILE, patrolRange: 12*TILE
     });
   });
+  applyWorldModifiers();
+  removeBlockedItems();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  NIVEL 3 ALTERNATIVO — GALLINERO (mundos 2 y 3)
+//  Plataforma rural con gallinas y pollitos corriendo rápido,
+//  cables de luz arriba con gaviotas posadas y ardillas que corren.
+// ═══════════════════════════════════════════════════════════════
+function buildLevel3Henhouse(){
+  tiles=[]; enemies=[]; items=[]; parts=[];
+  window._flagX = 99999999;
+  window._skateboard = null;
+  window._artifacts = [];
+  // Cables de luz (líneas eléctricas) — render decorativo + plataforma lógica para ardillas
+  window._powerLines = [];
+  const LW = 280;
+
+  // Suelo plano de tierra rural (con algunos huecos)
+  for(let x=0; x<LW; x++){
+    if(x>=44 && x<=47) continue;
+    if(x>=92 && x<=96) continue;
+    if(x>=148 && x<=152) continue;
+    if(x>=210 && x<=213) continue;
+    T(x, 11, 'gnd'); T(x, 12, 'gnd');
+  }
+
+  // Plataformas (cercas de gallinero, fardos de heno, cajones)
+  for(let x=10; x<=14; x++) T(x,9,'sld');
+  for(let x=18; x<=23; x++) T(x,7,'sld');
+  for(let x=27; x<=32; x++) T(x,8,'brk');
+  T(29,8,'qb'); T(31,8,'qb');
+
+  for(let x=36; x<=42; x++) T(x,7,'sld');
+  for(let x=41; x<=46; x++) T(x,9,'sld'); // sobre hueco
+
+  for(let x=52; x<=58; x++) T(x,8,'brk');
+  T(54,8,'qb'); T(56,8,'qbLife'); // vida extra
+
+  for(let x=62; x<=68; x++) T(x,6,'sld');
+  for(let x=72; x<=78; x++) T(x,8,'brk');
+  T(74,8,'qb'); T(76,8,'qb');
+
+  for(let x=83; x<=90; x++) T(x,9,'sld');
+  for(let x=92; x<=98; x++) T(x,7,'sld'); // sobre hueco
+
+  for(let x=104; x<=110; x++) T(x,8,'brk');
+  T(106,8,'qb'); T(108,8,'qb');
+
+  for(let x=115; x<=122; x++) T(x,6,'sld');
+  for(let x=126; x<=133; x++) T(x,8,'sld');
+  for(let x=138; x<=146; x++) T(x,7,'sld');
+  for(let x=147; x<=154; x++) T(x,9,'sld'); // sobre hueco
+
+  for(let x=160; x<=168; x++) T(x,7,'brk');
+  T(162,7,'qb'); T(164,7,'qbLife'); T(166,7,'qb'); // 2da vida
+
+  for(let x=174; x<=182; x++) T(x,8,'sld');
+  for(let x=188; x<=196; x++) T(x,6,'sld');
+  for(let x=200; x<=208; x++) T(x,8,'sld');
+  for(let x=209; x<=216; x++) T(x,9,'sld'); // sobre hueco
+
+  for(let x=222; x<=230; x++) T(x,7,'brk');
+  T(224,7,'qb'); T(226,7,'qb'); T(228,7,'qb');
+
+  for(let x=234; x<=242; x++) T(x,8,'sld');
+  for(let x=246; x<=254; x++) T(x,6,'sld');
+
+  // Postes (firehydrants reusados como decoración)
+  firehydrant(34, 2); firehydrant(80, 2); firehydrant(135, 2); firehydrant(190, 2); firehydrant(248, 3);
+
+  // CABLES DE LUZ — líneas horizontales por arriba, conectando postes
+  // y=2 y y=4 son las dos líneas principales (24px y 40px desde arriba)
+  // Las ardillas corren por estos cables como si fueran plataformas.
+  // Los cables se dibujan en render como líneas; aquí los registramos como
+  // datos lógicos para que las ardillas y gaviotas posadas usen su Y.
+  window._powerLines = [
+    // [xStart, xEnd, y]  (y en píxeles)
+    [0, 120, 2*TILE + 4],
+    [120, 270, 3*TILE + 4],
+    [0, 70, 4*TILE + 8],
+    [70, 200, 4*TILE + 8],
+    [200, 270, 4*TILE + 8]
+  ];
+
+  // ── HUESOS ──
+  [
+    [11,8],[13,8],
+    [19,6],[21,6],[23,6],
+    [28,7],[30,7],[32,7],
+    [37,6],[39,6],[41,6],
+    [44,8],
+    [53,7],[55,7],[57,7],
+    [64,5],[66,5],[68,5],
+    [73,7],[75,7],[77,7],
+    [85,8],[88,8],
+    [93,6],[95,6],[97,6],
+    [105,7],[107,7],[109,7],
+    [117,5],[119,5],[121,5],
+    [128,7],[131,7],
+    [140,6],[143,6],
+    [150,8],[152,8],
+    [161,6],[163,6],[165,6],[167,6],
+    [175,7],[178,7],
+    [189,5],[192,5],[195,5],
+    [201,7],[204,7],[207,7],
+    [212,8],[214,8],
+    [223,6],[225,6],[227,6],[229,6],
+    [235,7],[238,7],
+    [247,5],[250,5],[253,5]
+  ].forEach(([x,y]) => addBone(x,y));
+
+  // Bandera al final (montaña + asta)
+  for(let s=0; s<8; s++){
+    for(let r=0; r<=s; r++) T(258+s, 11-r, 'gnd');
+  }
+  for(let r=0; r<13; r++){
+    tiles.push({x:268*TILE, y:(r+1)*TILE, w:4, h:TILE, t:'pole', hit:false});
+  }
+  window._flagX = 268*TILE;
+
+  // ═══ ENEMIGOS DEL GALLINERO ═══
+
+  // GALLINAS — abundantes, corren rápido (a velocidad de mundo)
+  // Patrón: zigzag con paradas ocasionales, "picotean" el piso a veces.
+  const henSpots = [
+    16, 24, 33, 40, 48, 60, 70, 80, 88, 100, 112, 124, 136, 144,
+    155, 170, 180, 195, 205, 218, 230, 240, 252
+  ];
+  for(const ex of henSpots){
+    const dir = Math.random()>0.5?1:-1;
+    enemies.push({
+      x:ex*TILE, y:10*TILE,
+      w:16, h:14,
+      vx: 1.55*dir, vy:0, dir: dir,
+      alive:true, dead:false, deadT:0, fr:0, ft:0,
+      type:'walk', kind:'chicken',
+      baseSpd: 1.55,
+      jumpT: 80 + (Math.random()*60|0),
+      onGround:false,
+      breathT: Math.random()*Math.PI*2,
+      homeX: ex*TILE, patrolRange: 5*TILE,
+      peckT: 60 + (Math.random()*40|0),     // contador para picotear el piso
+      pecking: false,
+      pulse: Math.random()*Math.PI*2
+    });
+  }
+
+  // POLLITOS — más chicos, más rápidos, en pequeños grupos
+  const chickGroups = [
+    [22, 23, 25],
+    [44, 45],
+    [66, 67, 68],
+    [105, 106, 108],
+    [142, 144, 146],
+    [183, 185, 186],
+    [225, 227]
+  ];
+  for(const group of chickGroups){
+    for(const ex of group){
+      const dir = Math.random()>0.5?1:-1;
+      enemies.push({
+        x:ex*TILE, y:10*TILE + 2,
+        w:10, h:9,
+        vx: 1.85*dir, vy:0, dir: dir,
+        alive:true, dead:false, deadT:0, fr:0, ft:0,
+        type:'walk', kind:'chick',
+        baseSpd: 1.85,
+        jumpT: 50 + (Math.random()*30|0),
+        onGround:false,
+        breathT: Math.random()*Math.PI*2,
+        homeX: ex*TILE, patrolRange: 3*TILE,
+        pulse: Math.random()*Math.PI*2,
+        small: true
+      });
+    }
+  }
+
+  // GAVIOTAS POSADAS en los cables — vuelan cuando el jugador se acerca
+  const perchedGulls = [
+    [25, 2*TILE + 4],   // sobre cable superior
+    [60, 4*TILE + 8],   // cable medio
+    [95, 2*TILE + 4],
+    [130, 3*TILE + 4],
+    [165, 4*TILE + 8],
+    [200, 3*TILE + 4],
+    [235, 4*TILE + 8]
+  ];
+  for(const [ex, ey] of perchedGulls){
+    enemies.push({
+      x:ex*TILE, y:ey - 12,
+      w:22, h:12,
+      vx: 0, vy:0, dir: -1,
+      alive:true, dead:false, deadT:0, fr:0, ft:0,
+      type:'fly', kind:'seagull',
+      baseSpd: 1.6,
+      jumpT:0,
+      onGround:false,
+      breathT: Math.random()*Math.PI*2,
+      flyBaseY: ey - 12,
+      flyAmpY: 1.5*TILE,
+      flyPhase: Math.random()*Math.PI*2,
+      flySpeedY: 0.025 + Math.random()*0.015,
+      homeX: ex*TILE, patrolRange: 14*TILE,
+      perched: true,             // marcador: empieza posada
+      perchY: ey - 12,
+      takeOffT: 0,
+      idleFlap: 0
+    });
+  }
+
+  // ARDILLAS CORRIENDO POR LOS CABLES
+  // Se mueven horizontalmente a lo largo del cable. No caen al piso.
+  const cableSquirrels = [
+    [40,  2*TILE + 4],
+    [105, 3*TILE + 4],
+    [155, 4*TILE + 8],
+    [195, 3*TILE + 4],
+    [245, 4*TILE + 8]
+  ];
+  for(const [ex, ey] of cableSquirrels){
+    const dir = Math.random()>0.5?1:-1;
+    enemies.push({
+      x:ex*TILE, y:ey - 12,
+      w:14, h:12,
+      vx: 2.3*dir, vy:0, dir: dir,
+      alive:true, dead:false, deadT:0, fr:0, ft:0,
+      type:'walk', kind:'squirrel',
+      baseSpd: 2.3,
+      jumpT:999,                  // no salta
+      onGround:true,              // siempre "sobre" el cable
+      breathT: Math.random()*Math.PI*2,
+      small: true,
+      onCable: true,              // marcador: corre por cable, no por suelo
+      cableY: ey - 12,             // Y fija del cable
+      patrolRange: 30*TILE,       // rango amplio
+      homeX: ex*TILE
+    });
+  }
+
+  // Algunas ardillas en el suelo también (mezcla con gallinero)
+  [48, 88, 145, 200, 252].forEach(ex=>{
+    const dir = Math.random()>0.5?1:-1;
+    enemies.push({
+      x:ex*TILE, y:10*TILE,
+      w:14, h:12,
+      vx: 2.0*dir, vy:0, dir: dir,
+      alive:true, dead:false, deadT:0, fr:0, ft:0,
+      type:'walk', kind:'squirrel',
+      baseSpd: 2.0,
+      jumpT: 30+(Math.random()*18|0),
+      onGround:false,
+      breathT: Math.random()*Math.PI*2,
+      small:true,
+      homeX: ex*TILE, patrolRange: 4*TILE
+    });
+  });
+
   applyWorldModifiers();
   removeBlockedItems();
 }
@@ -3578,11 +3845,70 @@ function updateEnemies(){
     }
     // ─── SALTITOS DE ARDILLAS ───
     if(e.kind === 'squirrel'){
-      e.jumpT--;
-      if(e.jumpT <= 0 && e.onGround){
-        e.vy = JUMP_V * 0.55;
-        e.jumpT = 50 + (Math.random()*30|0);
+      // Ardillas que corren por cable: no saltan, vuelan horizontal
+      if(e.onCable){
+        e.jumpT = 999;
+        // Mantener Y fija en el cable
+        e.y = e.cableY;
+        e.vy = 0;
+      } else {
+        e.jumpT--;
+        if(e.jumpT <= 0 && e.onGround){
+          e.vy = JUMP_V * 0.55;
+          e.jumpT = 50 + (Math.random()*30|0);
+        }
       }
+    }
+    // ─── GALLINA: picotea el piso ocasionalmente ───
+    if(e.kind === 'chicken'){
+      e.peckT = (e.peckT || 60) - 1;
+      if(e.peckT <= 0){
+        e.pecking = !e.pecking;
+        e.peckT = e.pecking ? 35 : (80 + (Math.random()*100|0));
+      }
+    }
+    // ─── GAVIOTA POSADA: vuela cuando el jugador se acerca ───
+    if(e.kind === 'seagull' && e.perched){
+      const dxG = P.x - e.x;
+      const dyG = P.y - e.y;
+      const distG = Math.hypot(dxG, dyG);
+      if(distG < 5*TILE){
+        // Despegar
+        e.perched = false;
+        e.takeOffT = 30;
+        e.dir = dxG > 0 ? -1 : 1;     // huye en dirección opuesta
+        e.vx = e.dir * e.baseSpd;
+        // Burst pequeño de plumas
+        burst(e.x + e.w/2, e.y + e.h/2, '#dcdcdc', 8);
+      } else {
+        // Sigue posada: mantenerla en su Y fija (no aplicar gravedad)
+        e.y = e.perchY;
+        e.vx = 0; e.vy = 0;
+        e.idleFlap = (e.idleFlap || 0) + 1;
+      }
+    }
+
+    // ─── GAVIOTA POSADA: ya manejada arriba (no aplicar gravedad/colisión) ───
+    if(e.kind === 'seagull' && e.perched){
+      e.ft++;
+      if(e.ft > 16){ e.ft = 0; e.fr ^= 1; }
+      continue;
+    }
+    // ─── ARDILLA EN CABLE: corre horizontal sobre cable (sin gravedad) ───
+    if(e.kind === 'squirrel' && e.onCable){
+      e.ft++;
+      if(e.ft > 12){ e.ft = 0; e.fr ^= 1; }
+      // Movimiento horizontal
+      const moveXC = e.dir * e.baseSpd * speedMod;
+      e.x += moveXC;
+      // Rebote en extremos de patrulla
+      if(Math.abs(e.x - e.homeX) > e.patrolRange / 2){
+        e.dir = -e.dir;
+      }
+      // Mantener Y fija en el cable
+      e.y = e.cableY;
+      e.vy = 0;
+      continue;
     }
 
     // ─── MOVER X CON CHEQUEO DE PARED ───
@@ -6739,6 +7065,8 @@ function drawEnemy(e){
   else if(e.kind === 'sparrow') drawSparrow(e, x, y);
   else if(e.kind === 'rat') drawRat(e, x, y);
   else if(e.kind === 'badger') drawBadger(e, x, y);
+  else if(e.kind === 'chicken') drawChicken(e, x, y);
+  else if(e.kind === 'chick') drawChick(e, x, y);
   else if(e.kind === 'capi') drawCapincho(e, x, y);
   else if(e.kind === 'squirrel') drawSquirrel(e, x, y);
   else drawCat(e, x, y);
@@ -7870,6 +8198,215 @@ function drawBadger(e, x, y){
   ctx.restore();
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  RENDER — GALLINA
+//  Cuerpo blanco con cresta roja, alas grises, patas amarillas.
+//  Picotea el piso cuando e.pecking=true.
+// ═══════════════════════════════════════════════════════════════
+function drawChicken(e, x, y){
+  if(e.dead){
+    ctx.fillStyle = '#c0a080';
+    ctx.fillRect(x+2, y+e.h*0.4, e.w-4, e.h*0.5);
+    return;
+  }
+  e.breathT = (e.breathT || 0) + 0.08;
+  e.pulse = (e.pulse || 0) + 0.18;
+  const bob = Math.sin(e.breathT) * 0.5;
+  const isPecking = !!e.pecking;
+  const peckBob = isPecking ? Math.sin(e.pulse) * 3 : 0;
+
+  ctx.save();
+  if(e.dir < 0){
+    ctx.translate(x + e.w, 0);
+    ctx.scale(-1, 1);
+    x = 0;
+  } else {
+    ctx.translate(x, 0);
+    x = 0;
+  }
+
+  // Sombra
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(x+e.w/2, y+e.h+1, e.w/2-1, 1.5, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // Patas amarillas
+  const legCycle = isPecking ? 0 : Math.sin(e.breathT * 5) * 1.2;
+  ctx.fillStyle = '#f0c020';
+  // Pata izq
+  ctx.fillRect(x+e.w*0.35, y+e.h-3, 1.5, 3 - Math.abs(legCycle*0.4));
+  // Pata der
+  ctx.fillRect(x+e.w*0.55, y+e.h-3, 1.5, 3 - Math.abs(legCycle*0.4) + legCycle);
+  // Dedos
+  ctx.fillRect(x+e.w*0.32, y+e.h-0.5, 4, 0.8);
+  ctx.fillRect(x+e.w*0.52, y+e.h-0.5, 4, 0.8);
+
+  // Cuerpo blanco redondeado
+  ctx.fillStyle = '#fafafa';
+  ctx.beginPath();
+  ctx.ellipse(x+e.w*0.5, y+e.h*0.55 + bob, e.w*0.45, e.h*0.4, 0, 0, Math.PI*2);
+  ctx.fill();
+  // Ala lateral gris
+  ctx.fillStyle = '#dcdcdc';
+  ctx.beginPath();
+  ctx.ellipse(x+e.w*0.4, y+e.h*0.6 + bob, e.w*0.28, e.h*0.22, -0.2, 0, Math.PI*2);
+  ctx.fill();
+  // Línea de pluma del ala
+  ctx.strokeStyle = '#aaa';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(x+e.w*0.3, y+e.h*0.62 + bob);
+  ctx.lineTo(x+e.w*0.55, y+e.h*0.7 + bob);
+  ctx.stroke();
+
+  // Cabeza (se inclina al picotear)
+  const headX = x + e.w*0.65;
+  const headY = y + e.h*0.2 + bob + peckBob;
+  ctx.fillStyle = '#fafafa';
+  ctx.beginPath();
+  ctx.arc(headX, headY, e.h*0.28, 0, Math.PI*2);
+  ctx.fill();
+
+  // Cresta roja arriba (3 puntas)
+  ctx.fillStyle = '#e02020';
+  ctx.beginPath();
+  ctx.moveTo(headX - e.w*0.1, headY - e.h*0.2);
+  ctx.lineTo(headX - e.w*0.05, headY - e.h*0.4);
+  ctx.lineTo(headX, headY - e.h*0.25);
+  ctx.lineTo(headX + e.w*0.05, headY - e.h*0.42);
+  ctx.lineTo(headX + e.w*0.1, headY - e.h*0.25);
+  ctx.lineTo(headX + e.w*0.13, headY - e.h*0.35);
+  ctx.lineTo(headX + e.w*0.15, headY - e.h*0.2);
+  ctx.closePath();
+  ctx.fill();
+
+  // Pico naranja triangular
+  ctx.fillStyle = '#ff9020';
+  ctx.beginPath();
+  ctx.moveTo(headX + e.h*0.26, headY - 1);
+  ctx.lineTo(headX + e.h*0.48, headY + 0.5);
+  ctx.lineTo(headX + e.h*0.26, headY + 2);
+  ctx.closePath();
+  ctx.fill();
+  // Sombra del pico
+  ctx.fillStyle = '#c06010';
+  ctx.fillRect(headX + e.h*0.26, headY + 1.5, e.h*0.2, 0.7);
+
+  // Ojo pequeño
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(headX + e.w*0.05, headY - 1.5, 2, 2);
+  ctx.fillStyle = '#1a1a1a';
+  ctx.fillRect(headX + e.w*0.07, headY - 1, 1.2, 1.2);
+
+  // Barba roja debajo del pico
+  ctx.fillStyle = '#c02020';
+  ctx.beginPath();
+  ctx.ellipse(headX + e.h*0.25, headY + e.h*0.18, 1.5, 2.5, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // Cola de plumas atrás
+  ctx.fillStyle = '#fafafa';
+  ctx.beginPath();
+  ctx.moveTo(x + e.w*0.08, y + e.h*0.4 + bob);
+  ctx.lineTo(x - 2, y + e.h*0.25 + bob);
+  ctx.lineTo(x - 1, y + e.h*0.5 + bob);
+  ctx.lineTo(x + e.w*0.12, y + e.h*0.55 + bob);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  RENDER — POLLITO
+//  Bebé esférico amarillo con pico y patitas naranja.
+// ═══════════════════════════════════════════════════════════════
+function drawChick(e, x, y){
+  if(e.dead){
+    ctx.fillStyle = '#c0a040';
+    ctx.fillRect(x+2, y+e.h*0.4, e.w-4, e.h*0.5);
+    return;
+  }
+  e.breathT = (e.breathT || 0) + 0.12;
+  e.pulse = (e.pulse || 0) + 0.22;
+  const bob = Math.sin(e.breathT) * 0.7;
+  const hop = Math.max(0, Math.sin(e.pulse) * 1.8);
+
+  ctx.save();
+  if(e.dir < 0){
+    ctx.translate(x + e.w, 0);
+    ctx.scale(-1, 1);
+    x = 0;
+  } else {
+    ctx.translate(x, 0);
+    x = 0;
+  }
+
+  // Sombra
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(x+e.w/2, y+e.h+1, e.w/2-1, 1, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // Patitas naranja (con hop)
+  ctx.fillStyle = '#ff9020';
+  ctx.fillRect(x+e.w*0.3, y+e.h-2 - hop*0.5, 1.2, 2);
+  ctx.fillRect(x+e.w*0.55, y+e.h-2 - hop*0.5, 1.2, 2);
+  // Dedos
+  ctx.fillRect(x+e.w*0.28, y+e.h-0.3 - hop*0.5, 2.5, 0.6);
+  ctx.fillRect(x+e.w*0.53, y+e.h-0.3 - hop*0.5, 2.5, 0.6);
+
+  // Cuerpo amarillo redondo (casi esfera)
+  ctx.fillStyle = '#ffe040';
+  ctx.beginPath();
+  ctx.arc(x+e.w*0.5, y+e.h*0.5 + bob - hop, e.w*0.45, 0, Math.PI*2);
+  ctx.fill();
+  // Brillo
+  ctx.fillStyle = '#fff080';
+  ctx.beginPath();
+  ctx.arc(x+e.w*0.4, y+e.h*0.4 + bob - hop, e.w*0.18, 0, Math.PI*2);
+  ctx.fill();
+
+  // Mini ala
+  ctx.fillStyle = '#f0c020';
+  ctx.beginPath();
+  ctx.ellipse(x+e.w*0.35, y+e.h*0.55 + bob - hop, e.w*0.18, e.h*0.16, -0.2, 0, Math.PI*2);
+  ctx.fill();
+
+  // Pico chico naranja
+  ctx.fillStyle = '#ff7010';
+  const pcX = x + e.w*0.78;
+  const pcY = y + e.h*0.4 + bob - hop;
+  ctx.beginPath();
+  ctx.moveTo(pcX, pcY);
+  ctx.lineTo(pcX + 3, pcY + 1);
+  ctx.lineTo(pcX, pcY + 2);
+  ctx.closePath();
+  ctx.fill();
+
+  // Ojito (uno solo visible)
+  ctx.fillStyle = '#1a1a1a';
+  ctx.beginPath();
+  ctx.arc(x + e.w*0.62, y + e.h*0.4 + bob - hop, 1.3, 0, Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(x + e.w*0.6, y + e.h*0.35 + bob - hop, 0.7, 0.7);
+
+  // Pelitos arriba (3 plumitas)
+  ctx.strokeStyle = '#f0c020';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x + e.w*0.45, y + e.h*0.05 + bob - hop);
+  ctx.lineTo(x + e.w*0.45, y - 2 + bob - hop);
+  ctx.moveTo(x + e.w*0.55, y + e.h*0.05 + bob - hop);
+  ctx.lineTo(x + e.w*0.55, y - 3 + bob - hop);
+  ctx.moveTo(x + e.w*0.5, y + e.h*0.05 + bob - hop);
+  ctx.lineTo(x + e.w*0.5, y - 2.5 + bob - hop);
+  ctx.stroke();
+
+  ctx.restore();
+}
 
 function drawBoss(){
   if(!boss || !boss.alive) return;
@@ -8607,6 +9144,42 @@ function drawPrincessBamby(f, x, y){
   ctx.stroke();
 }
 
+// Render de cables de luz para el gallinero (nivel 3 mundos 2/3)
+function drawPowerLines(){
+  if(!window._powerLines || window._powerLines.length === 0) return;
+  ctx.save();
+  for(const [xStart, xEnd, y] of window._powerLines){
+    const x1 = xStart * TILE - cam.x;
+    const x2 = xEnd * TILE - cam.x;
+    if(x2 < -10 || x1 > CW + 10) continue;
+    // Cable principal grueso oscuro
+    ctx.strokeStyle = '#1a1a1a';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.moveTo(x1, y);
+    // Pequeña catenaria: el cable cae un poco en el medio
+    const midX = (x1 + x2) / 2;
+    const sag = 3;
+    ctx.quadraticCurveTo(midX, y + sag, x2, y);
+    ctx.stroke();
+    // Cable más fino paralelo (cable secundario)
+    ctx.strokeStyle = '#3a3a3a';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(x1, y + 3);
+    ctx.quadraticCurveTo(midX, y + 3 + sag, x2, y + 3);
+    ctx.stroke();
+    // Brillito a lo largo del cable (efecto de luz)
+    ctx.strokeStyle = 'rgba(255,255,200,0.18)';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(x1, y - 0.8);
+    ctx.quadraticCurveTo(midX, y - 0.8 + sag, x2, y - 0.8);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawArtifacts(){
   if(!window._artifacts) return;
   for(const a of window._artifacts){
@@ -8844,6 +9417,9 @@ function render(){
 
   // skateboard pickup (level 3)
   drawSkateboardItem();
+
+  // Cables de luz del gallinero (nivel 3 mundos 2/3)
+  drawPowerLines();
 
   // artifacts (level 3 & 4 decorations)
   drawArtifacts();
