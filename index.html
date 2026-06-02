@@ -380,6 +380,13 @@ button.action-btn.secondary{
     <button class="mode-btn" data-mode="2p" id="mode-2p">👥 2 JUGADORES</button>
   </div>
 
+  <!-- Selector de dificultad -->
+  <div id="diff-select" style="display:flex;justify-content:center;gap:10px;margin:0 0 12px 0;flex-wrap:wrap;">
+    <button class="mode-btn" data-diff="easy" id="diff-easy">🐢 FÁCIL <span style="font-size:10px;opacity:.7;font-weight:600;">¼ veloc.</span></button>
+    <button class="mode-btn selected" data-diff="normal" id="diff-normal">🐶 NORMAL</button>
+    <button class="mode-btn" data-diff="hard" id="diff-hard">🔥 DIFÍCIL <span style="font-size:10px;opacity:.7;font-weight:600;">+10%</span></button>
+  </div>
+
   <h2 id="char-title">Elegí tu héroe</h2>
   <div id="char-select">
     <div class="char-card" data-char="wiener">
@@ -641,6 +648,21 @@ let worldNum = 1;             // 1, 2 o 3 — selecciona modificadores globales
 let enemySpeedMul = 1.0;      // multiplicador aplicado al baseSpd de todos los enemigos al construir el nivel
 let introT = 0;               // contador del cartel de intro de nivel (0..180+). Congela enemigos hasta 140.
 let powerUpT = 0;             // contador del power-up (hueso dorado mágico). >0 = invencible
+
+// ── DIFICULTAD GLOBAL (seleccionable en el menú) ──
+//  fácil = ¼ de velocidad · normal = velocidad normal · difícil = +10%
+let difficultyMul = 1.0;
+let difficultyKey = 'normal';                       // 'easy' | 'normal' | 'hard'
+// Progresión de velocidad por mundo MUCHO más suave que antes (antes 1/2/2.5).
+// Esto soluciona el "todo va tan rápido que no se entiende" del mundo 2 y 3.
+const WORLD_SPEED_BASE = { 1: 1.0, 2: 1.15, 3: 1.30 };
+function computeEnemySpeedMul(){
+  return (WORLD_SPEED_BASE[worldNum] || 1.0) * difficultyMul;
+}
+function setDifficulty(key){
+  difficultyKey = (key === 'easy' || key === 'hard') ? key : 'normal';
+  difficultyMul = difficultyKey === 'easy' ? 0.25 : difficultyKey === 'hard' ? 1.10 : 1.0;
+}
 
 // Tiles que el jugador y enemigos consideran sólidos
 const SOLID = new Set(['gnd','brk','qb','qbLife','ptop','pbod','ftop','fbod','sld','stone','dngnd','fall','ice','grassIsle','bridge']);
@@ -1488,6 +1510,7 @@ function saveGame(){
       bonesSinceLastLife: bonesSinceLastLife,
       chosenChar: chosenChar,
       subLevelUsed: subLevelUsed,
+      difficultyKey: difficultyKey,
       timestamp: Date.now()
     };
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
@@ -1719,7 +1742,8 @@ function continueGame(){
   savedMainState = null;
   playerBullets = [];
   paused = false;
-  enemySpeedMul = worldNum === 2 ? 2.0 : worldNum === 3 ? 2.5 : 1.0;
+  setDifficulty(data.difficultyKey || difficultyKey);
+  enemySpeedMul = computeEnemySpeedMul();
   initLevel(data.level);
   if(!loopGo){ loopGo=true; requestAnimationFrame(loop); }
 }
@@ -1795,10 +1819,8 @@ function initLevel(lvl){
   projectiles = [];
   window._powerLines = null;     // cables solo en gallinero (n3 M2/M3)
 
-  // Configurar multiplicador de velocidad de enemigos según el mundo
-  if(worldNum === 2) enemySpeedMul = 2.0;
-  else if(worldNum === 3) enemySpeedMul = 2.5;
-  else enemySpeedMul = 1.0;
+  // Velocidad de enemigos: base por mundo × multiplicador de dificultad del menú.
+  enemySpeedMul = computeEnemySpeedMul();
   // Ajuste fino: 2-2 es la caverna del mundo tétrico, sentía demasiado rápida.
   // Bajamos 5% específico para ese nivel.
   if(worldNum === 2 && lvl === 2) enemySpeedMul *= 0.95;
@@ -1923,13 +1945,13 @@ function applyWorldModifiers(){
     if(e.vx != null) e.vx *= enemySpeedMul;
     if(e.flySpeedY != null) e.flySpeedY *= Math.min(enemySpeedMul, 1.6);  // limitar oscilación vertical
   }
-  // 2) Mundo 2 y 3: ratitas frenéticas (20 por nivel principal, no subnivel)
+  // 2) Mundo 2 y 3: ratitas frenéticas — menos cantidad que antes para no saturar (10 en M2, 14 en M3).
   if(worldNum >= 2 && !inSubLevel){
-    spawnFrenzyRats(20);
+    spawnFrenzyRats(worldNum === 2 ? 10 : 14);
   }
-  // 3) Mundo 3: gorriones erráticos
+  // 3) Mundo 3: gorriones erráticos — reducidos de 8 a 6.
   if(worldNum >= 3 && !inSubLevel){
-    spawnSparrows(8);
+    spawnSparrows(6);
   }
   // 4) Marcar bloque mágico (power-up) si corresponde al nivel
   if(!inSubLevel) markMagicBlock();
@@ -1941,11 +1963,15 @@ function spawnFrenzyRats(n){
   let maxX = 0;
   for(const t of tiles) if(t.x > maxX) maxX = t.x;
   const rangeEnd = Math.min(maxX, (window._flagX || maxX) - 4*TILE);
+  // No spawnear ratitas cerca del punto de inicio del jugador (evita que aparezcan
+  // encima al comenzar el nivel — bug de 2-5). Margen de 16 tiles desde el spawn.
+  const minSpawnX = (P ? P.x : 60) + 16*TILE;
   // Encontrar tiles sólidos a fila 10 o 11 (potenciales spawn-points seguros)
   // (evitar spawn sobre agua que las mata inmediato en N4 y N5)
   const safeSpots = [];
   for(const t of tiles){
     if(!SOLID.has(t.t)) continue;
+    if(t.x < minSpawnX) continue;
     if(t.y === 11*TILE || t.y === 10*TILE){
       // Verificar que no haya otro tile sólido directamente encima (para que la ratita quepa)
       const upY = t.y - TILE;
@@ -2692,18 +2718,13 @@ function buildLevel3Henhouse(){
   // Postes (firehydrants reusados como decoración)
   firehydrant(34, 2); firehydrant(80, 2); firehydrant(135, 2); firehydrant(190, 2); firehydrant(248, 3);
 
-  // CABLES DE LUZ — líneas horizontales por arriba, conectando postes
-  // y=2 y y=4 son las dos líneas principales (24px y 40px desde arriba)
-  // Las ardillas corren por estos cables como si fueran plataformas.
-  // Los cables se dibujan en render como líneas; aquí los registramos como
-  // datos lógicos para que las ardillas y gaviotas posadas usen su Y.
+  // CABLES DE LUZ — DOS líneas CONTINUAS de punta a punta (sin cortes ni saltos de altura).
+  // Las ardillas y gaviotas posadas se ubican exactamente sobre una de estas dos alturas.
+  const CABLE_HI = 2*TILE + 6;   // cable superior (46px)
+  const CABLE_LO = 3*TILE + 10;  // cable inferior (70px)
   window._powerLines = [
-    // [xStart, xEnd, y]  (y en píxeles)
-    [0, 120, 2*TILE + 4],
-    [120, 270, 3*TILE + 4],
-    [0, 70, 4*TILE + 8],
-    [70, 200, 4*TILE + 8],
-    [200, 270, 4*TILE + 8]
+    [0, 272, CABLE_HI],
+    [0, 272, CABLE_LO]
   ];
 
   // ── HUESOS ──
@@ -2755,14 +2776,14 @@ function buildLevel3Henhouse(){
     enemies.push({
       x:ex*TILE, y:10*TILE,
       w:16, h:14,
-      vx: 1.55*dir, vy:0, dir: dir,
+      vx: 1.2*dir, vy:0, dir: dir,
       alive:true, dead:false, deadT:0, fr:0, ft:0,
       type:'walk', kind:'chicken',
-      baseSpd: 1.55,
+      baseSpd: 1.2,
       jumpT: 80 + (Math.random()*60|0),
       onGround:false,
       breathT: Math.random()*Math.PI*2,
-      homeX: ex*TILE, patrolRange: 5*TILE,
+      homeX: ex*TILE, patrolRange: 7*TILE,
       peckT: 60 + (Math.random()*40|0),     // contador para picotear el piso
       pecking: false,
       pulse: Math.random()*Math.PI*2
@@ -2785,29 +2806,24 @@ function buildLevel3Henhouse(){
       enemies.push({
         x:ex*TILE, y:10*TILE + 2,
         w:10, h:9,
-        vx: 1.85*dir, vy:0, dir: dir,
+        vx: 1.4*dir, vy:0, dir: dir,
         alive:true, dead:false, deadT:0, fr:0, ft:0,
         type:'walk', kind:'chick',
-        baseSpd: 1.85,
+        baseSpd: 1.4,
         jumpT: 50 + (Math.random()*30|0),
         onGround:false,
         breathT: Math.random()*Math.PI*2,
-        homeX: ex*TILE, patrolRange: 3*TILE,
+        homeX: ex*TILE, patrolRange: 5*TILE,
         pulse: Math.random()*Math.PI*2,
         small: true
       });
     }
   }
 
-  // GAVIOTAS POSADAS en los cables — vuelan cuando el jugador se acerca
+  // GAVIOTAS POSADAS — sobre las DOS alturas de cable reales (alternadas).
   const perchedGulls = [
-    [25, 2*TILE + 4],   // sobre cable superior
-    [60, 4*TILE + 8],   // cable medio
-    [95, 2*TILE + 4],
-    [130, 3*TILE + 4],
-    [165, 4*TILE + 8],
-    [200, 3*TILE + 4],
-    [235, 4*TILE + 8]
+    [25, CABLE_HI], [60, CABLE_LO], [95, CABLE_HI],
+    [130, CABLE_LO], [165, CABLE_HI], [200, CABLE_LO], [235, CABLE_HI]
   ];
   for(const [ex, ey] of perchedGulls){
     enemies.push({
@@ -2816,7 +2832,7 @@ function buildLevel3Henhouse(){
       vx: 0, vy:0, dir: -1,
       alive:true, dead:false, deadT:0, fr:0, ft:0,
       type:'fly', kind:'seagull',
-      baseSpd: 1.6,
+      baseSpd: 1.35,
       jumpT:0,
       onGround:false,
       breathT: Math.random()*Math.PI*2,
@@ -2832,45 +2848,41 @@ function buildLevel3Henhouse(){
     });
   }
 
-  // ARDILLAS CORRIENDO POR LOS CABLES
-  // Se mueven horizontalmente a lo largo del cable. No caen al piso.
+  // ARDILLAS EN CABLE — sobre las DOS alturas reales, más lentas (1.5), rango 24.
   const cableSquirrels = [
-    [40,  2*TILE + 4],
-    [105, 3*TILE + 4],
-    [155, 4*TILE + 8],
-    [195, 3*TILE + 4],
-    [245, 4*TILE + 8]
+    [40,  CABLE_HI], [105, CABLE_LO], [155, CABLE_HI],
+    [195, CABLE_LO], [245, CABLE_HI]
   ];
   for(const [ex, ey] of cableSquirrels){
     const dir = Math.random()>0.5?1:-1;
     enemies.push({
       x:ex*TILE, y:ey - 12,
       w:14, h:12,
-      vx: 2.3*dir, vy:0, dir: dir,
+      vx: 1.5*dir, vy:0, dir: dir,
       alive:true, dead:false, deadT:0, fr:0, ft:0,
       type:'walk', kind:'squirrel',
-      baseSpd: 2.3,
+      baseSpd: 1.5,
       jumpT:999,                  // no salta
       onGround:true,              // siempre "sobre" el cable
       breathT: Math.random()*Math.PI*2,
       small: true,
       onCable: true,              // marcador: corre por cable, no por suelo
       cableY: ey - 12,             // Y fija del cable
-      patrolRange: 30*TILE,       // rango amplio
+      patrolRange: 24*TILE,
       homeX: ex*TILE
     });
   }
 
-  // Algunas ardillas en el suelo también (mezcla con gallinero)
+  // Algunas ardillas en el suelo también (mezcla con gallinero) — más lentas (1.4).
   [48, 88, 145, 200, 252].forEach(ex=>{
     const dir = Math.random()>0.5?1:-1;
     enemies.push({
       x:ex*TILE, y:10*TILE,
       w:14, h:12,
-      vx: 2.0*dir, vy:0, dir: dir,
+      vx: 1.4*dir, vy:0, dir: dir,
       alive:true, dead:false, deadT:0, fr:0, ft:0,
       type:'walk', kind:'squirrel',
-      baseSpd: 2.0,
+      baseSpd: 1.4,
       jumpT: 30+(Math.random()*18|0),
       onGround:false,
       breathT: Math.random()*Math.PI*2,
@@ -3194,8 +3206,8 @@ function buildLevel5(){
 
   // ── CARPINCHOS EN ISLAS ──
   // Patrullan las islas (terrestres, mortales como en N4)
-  // Saltamos la isla inicial (1-9) para dar margen.
-  [14, 22, 30, 38, 47, 55, 64, 72, 81, 89, 98, 107, 115, 124, 133, 143, 152, 162, 171].forEach(ex=>{
+  // El primero ahora arranca en x=22 (NO en la isla inicial ni la 2da).
+  [22, 30, 38, 47, 55, 64, 72, 81, 89, 98, 107, 115, 124, 133, 143, 152, 162, 171].forEach(ex=>{
     const dir = Math.random()>0.5?1:-1;
     enemies.push({
       x:ex*TILE, y:10*TILE,
@@ -3218,34 +3230,34 @@ function buildLevel5(){
   // Algunos llevan un carpincho encima (decorativo, parte del mismo sprite).
   // NO se pueden matar (igual que carpinchos acuáticos N4).
   const crocSpawns = [
-    [12,  false],
-    [20,  true],   // con carpincho encima
-    [35,  false],
-    [50,  false],
-    [60,  true],   // con carpincho encima
-    [76,  false],
-    [88,  false],
-    [100, true],   // con carpincho encima
-    [112, false],
-    [122, false],
-    [135, true],   // con carpincho encima
-    [148, false],
-    [160, false],
-    [172, true]    // con carpincho encima
+    [24,  false],
+    [32,  true],   // con carpincho encima
+    [44,  false],
+    [56,  false],
+    [66,  true],   // con carpincho encima
+    [80,  false],
+    [92,  false],
+    [104, true],   // con carpincho encima
+    [116, false],
+    [126, false],
+    [138, true],   // con carpincho encima
+    [150, false],
+    [162, false],
+    [174, true]    // con carpincho encima
   ];
   crocSpawns.forEach(([ex, hasRider])=>{
     const dir = Math.random()>0.5?1:-1;
     enemies.push({
       x:ex*TILE, y: water.surfaceY - 10,
       w:42, h:16,
-      vx: 1.02*dir, vy:0, dir: dir,
+      vx: 0.85*dir, vy:0, dir: dir,
       alive:true, dead:false, deadT:0, fr:0, ft:0,
       type:'croc', kind:'croc',
-      baseSpd:1.02,
+      baseSpd:0.85,
       jumpT:0,
       onGround:false,
       breathT: Math.random()*Math.PI*2,
-      homeX: ex*TILE, patrolRange: 14*TILE,  // rango amplio de patrulla
+      homeX: ex*TILE, patrolRange: 10*TILE,
       waterEnemy:true,
       waterY: water.surfaceY - 10,
       hasRider: hasRider,
@@ -3263,10 +3275,10 @@ function buildLevel5(){
     enemies.push({
       x:ex*TILE, y:ey*TILE,
       w:18, h:12,
-      vx: 1.6*dir, vy:0, dir: dir,
+      vx: 1.3*dir, vy:0, dir: dir,
       alive:true, dead:false, deadT:0, fr:0, ft:0,
       type:'fly', kind:'bat',
-      baseSpd:1.6,
+      baseSpd:1.3,
       jumpT:0,
       onGround:false,
       breathT: Math.random()*Math.PI*2,
@@ -3704,6 +3716,42 @@ function updateEnemies(){
     // Vuela horizontal con oscilación vertical (zigzag). NO tiene gravedad.
     // Sí se puede matar saltándole encima.
     if(e.type === 'fly'){
+      // ─── GAVIOTA POSADA EN CABLE: queda quieta hasta que el jugador se acerca ───
+      // (Las gaviotas posadas son type:'fly'; sin esto despegaban al instante.)
+      if(e.perched){
+        e.y = e.perchY;
+        e.vx = 0; e.vy = 0;
+        e.idleFlap = (e.idleFlap || 0) + 1;
+        // Despegue: solo si el jugador entra en un radio de 5 tiles
+        const dxG = P.x - e.x, dyG = P.y - e.y;
+        if(Math.hypot(dxG, dyG) < 5*TILE){
+          e.perched = false;
+          e.dir = dxG > 0 ? -1 : 1;            // huye en sentido opuesto
+          e.vx = e.dir * e.baseSpd;
+          e.flyBaseY = e.perchY;
+          e.flyPhase = 0;
+          burst(e.x + e.w/2, e.y + e.h/2, '#dcdcdc', 8);  // plumas
+        } else {
+          // Mientras está posada permite aplastarla / matarla con power-up, pero no se mueve.
+          if(!P.dead && P.inv === 0 && active){
+            const hbP = {x:e.x+2, y:e.y+2, w:e.w-4, h:e.h-4};
+            if(aabb(P, hbP)){
+              if(powerUpT > 0 || (P.vy > 0.4 && P.y + P.h < e.y + e.h*0.6)){
+                e.dead = true; e.deadT = 0; e.vy = -3; e.vx = 0;
+                if(P.vy > 0) P.vy = -6.2;
+                rewardBone(1); sfxHurt();
+                burst(e.x+e.w/2, e.y+4, '#9060c0', 14);
+                showFloatingText('+1', e.x+e.w/2, e.y, '#ffd34d');
+              } else {
+                P.dead = true;
+                burst(P.x+P.w/2, P.y+P.h/2, '#ff2020', 16);
+                cam.shakeT = 12; sfxHurt();
+              }
+            }
+          }
+          continue;  // sigue posada (sin gravedad), también fuera de pantalla
+        }
+      }
       e.flyPhase += e.flySpeedY;
       // Oscilación vertical sinusoidal
       e.y = e.flyBaseY + Math.sin(e.flyPhase) * e.flyAmpY;
@@ -3761,6 +3809,39 @@ function updateEnemies(){
             burst(P.x+P.w/2, P.y+P.h/2, '#ff2020', 16);
             cam.shakeT = 12;
             sfxHurt();
+          }
+        }
+      }
+      continue;
+    }
+
+    // ─── ARDILLA EN CABLE: corre horizontal sobre el cable (sin gravedad) ───
+    // Va ANTES del bloque de "fuera de pantalla", para que no caiga al salir de
+    // cámara y reaparezca teletransportada (bug del cable del gallinero).
+    if(e.onCable){
+      e.ft++;
+      if(e.ft > 12){ e.ft = 0; e.fr ^= 1; }
+      e.x += e.dir * e.baseSpd;
+      // Rebote dentro del rango de patrulla
+      if(e.x > e.homeX + e.patrolRange/2){ e.x = e.homeX + e.patrolRange/2; e.dir = -1; }
+      else if(e.x < e.homeX - e.patrolRange/2){ e.x = e.homeX - e.patrolRange/2; e.dir = 1; }
+      // Pegada al cable
+      e.y = e.cableY;
+      e.vy = 0;
+      // Colisión con el jugador solo cuando está en pantalla
+      if(!P.dead && P.inv === 0 && active){
+        const hbC = {x:e.x+2, y:e.y+2, w:e.w-4, h:e.h-4};
+        if(aabb(P, hbC)){
+          if(powerUpT > 0 || (P.vy > 0.4 && P.y + P.h < e.y + e.h*0.55)){
+            e.dead = true; e.deadT = 0; e.vy = -3; e.vx = 0;
+            if(P.vy > 0) P.vy = -6.2;
+            rewardBone(1); sfxHurt();
+            burst(e.x+e.w/2, e.y+4, '#d8943c', 14);
+            showFloatingText('+1', e.x+e.w/2, e.y, '#ffd34d');
+          } else {
+            P.dead = true;
+            burst(P.x+P.w/2, P.y+P.h/2, '#ff2020', 16);
+            cam.shakeT = 12; sfxHurt();
           }
         }
       }
@@ -4044,7 +4125,7 @@ function updateBoss(){
   }
 
   // Velocidad base — escala con mundo y enojo. Velocidades altas, IA decide la dirección.
-  const worldSpdMul = worldNum === 1 ? 1.0 : (worldNum === 2 ? 1.35 : 1.65);
+  const worldSpdMul = (worldNum === 1 ? 1.0 : (worldNum === 2 ? 1.35 : 1.65)) * difficultyMul;
   const baseChase = (boss.angry ? 3.2 : 2.0) * worldSpdMul;
   const dashSpd = (boss.angry ? 6.5 : 5.2) * worldSpdMul;
 
@@ -4338,7 +4419,7 @@ function updateBoss5(){
     boss.diveCooldown = 280;
   }
 
-  const worldSpdMul = worldNum === 1 ? 1.0 : (worldNum === 2 ? 1.35 : 1.7);
+  const worldSpdMul = (worldNum === 1 ? 1.0 : (worldNum === 2 ? 1.35 : 1.7)) * difficultyMul;
   const baseSpd = (boss.angry ? 2.8 : 1.8) * worldSpdMul;
   const chargeSpd = (boss.angry ? 6 : 5) * worldSpdMul;
 
@@ -9148,34 +9229,50 @@ function drawPrincessBamby(f, x, y){
 function drawPowerLines(){
   if(!window._powerLines || window._powerLines.length === 0) return;
   ctx.save();
-  for(const [xStart, xEnd, y] of window._powerLines){
-    const x1 = xStart * TILE - cam.x;
-    const x2 = xEnd * TILE - cam.x;
-    if(x2 < -10 || x1 > CW + 10) continue;
-    // Cable principal grueso oscuro
-    ctx.strokeStyle = '#1a1a1a';
-    ctx.lineWidth = 2.2;
-    ctx.beginPath();
-    ctx.moveTo(x1, y);
-    // Pequeña catenaria: el cable cae un poco en el medio
-    const midX = (x1 + x2) / 2;
-    const sag = 3;
-    ctx.quadraticCurveTo(midX, y + sag, x2, y);
-    ctx.stroke();
-    // Cable más fino paralelo (cable secundario)
-    ctx.strokeStyle = '#3a3a3a';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.moveTo(x1, y + 3);
-    ctx.quadraticCurveTo(midX, y + 3 + sag, x2, y + 3);
-    ctx.stroke();
-    // Brillito a lo largo del cable (efecto de luz)
-    ctx.strokeStyle = 'rgba(255,255,200,0.18)';
-    ctx.lineWidth = 0.8;
-    ctx.beginPath();
-    ctx.moveTo(x1, y - 0.8);
-    ctx.quadraticCurveTo(midX, y - 0.8 + sag, x2, y - 0.8);
-    ctx.stroke();
+  const SPAN = 6 * TILE;   // distancia entre postes (vano del cable)
+  const SAG  = 5;          // caída de la catenaria en cada vano
+  for(const [xStartTile, xEndTile, y] of window._powerLines){
+    const wx1 = xStartTile * TILE;   // extremos en coords de mundo
+    const wx2 = xEndTile * TILE;
+    // Polilínea continua de punta a punta, con una pequeña catenaria por vano.
+    // Cada par de cables (grueso + fino) se traza de una sola pasada → sin cortes.
+    const drawCable = (offY, style, width) => {
+      ctx.strokeStyle = style;
+      ctx.lineWidth = width;
+      ctx.beginPath();
+      let first = true;
+      for(let wx = wx1; wx < wx2; wx += SPAN){
+        const segEnd = Math.min(wx + SPAN, wx2);
+        const sx = wx - cam.x;
+        const ex = segEnd - cam.x;
+        // Saltar vanos completamente fuera de pantalla (pero la línea sigue continua)
+        if(ex < -10 || sx > CW + 10){ first = true; continue; }
+        if(first){ ctx.moveTo(sx, y + offY); first = false; }
+        const midX = (sx + ex) / 2;
+        ctx.quadraticCurveTo(midX, y + offY + SAG, ex, y + offY);
+      }
+      ctx.stroke();
+    };
+    // Cable principal grueso, cable fino paralelo y brillito de luz
+    drawCable(0,    '#1a1a1a', 2.2);
+    drawCable(3,    '#3a3a3a', 1.2);
+    drawCable(-0.8, 'rgba(255,255,200,0.18)', 0.8);
+    // Postes de soporte (cada 2 vanos) — sólo decorativos, no sólidos
+    ctx.strokeStyle = '#4a3520';
+    ctx.lineWidth = 2;
+    for(let wx = wx1; wx <= wx2; wx += SPAN * 2){
+      const px = wx - cam.x;
+      if(px < -6 || px > CW + 6) continue;
+      ctx.beginPath();
+      ctx.moveTo(px, y - 4);
+      ctx.lineTo(px, y + 16);          // bajada corta del poste
+      ctx.stroke();
+      // Travesaño
+      ctx.beginPath();
+      ctx.moveTo(px - 5, y - 1);
+      ctx.lineTo(px + 5, y - 1);
+      ctx.stroke();
+    }
   }
   ctx.restore();
 }
@@ -10382,6 +10479,15 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   if(mode1pBtn) mode1pBtn.addEventListener('click', () => { selectedMode = '1p'; updateModeUI(); });
   if(mode2pBtn) mode2pBtn.addEventListener('click', () => { selectedMode = '2p'; updateModeUI(); });
+
+  // ───── Selector de dificultad (Fácil ¼ · Normal · Difícil +10%) ─────
+  const diffBtns = document.querySelectorAll('#diff-select .mode-btn');
+  diffBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      setDifficulty(btn.dataset.diff);
+      diffBtns.forEach(b => b.classList.toggle('selected', b.dataset.diff === difficultyKey));
+    });
+  });
 
   // start button
   const startBtn = document.getElementById('btn-start');
