@@ -643,6 +643,8 @@ let subLevelReturnX = 0;      // X del nivel principal donde regresar
 let subLevelReturnY = 0;
 let subLevelUsed = false;     // una sola vez por partida (subnivel 1 - Bubble Bobble)
 let subLevel4Used = false;    // subnivel 4 (cueva atajo de Nordeltopolis) por mundo
+let miniBossUsed = false;     // cuarto secreto del mini jefe (rata gigante) — por carga de nivel
+let miniBoss = null;          // objeto del mini jefe mientras se está en su sala
 let savedMainState = null;    // snapshot del nivel principal al entrar al subnivel
 let worldNum = 1;             // 1, 2 o 3 — selecciona modificadores globales
 let enemySpeedMul = 1.0;      // multiplicador aplicado al baseSpd de todos los enemigos al construir el nivel
@@ -1825,6 +1827,13 @@ function initLevel(lvl){
   // Bajamos 5% específico para ese nivel.
   if(worldNum === 2 && lvl === 2) enemySpeedMul *= 0.95;
 
+  // Reset del cuarto secreto del mini jefe (rata gigante)
+  window._inMiniBoss = false;
+  window._miniEntryX = null; window._miniEntryY = null;
+  window._miniBossExitX = null; window._miniBossExitY = null;
+  miniBoss = null;
+  miniBossUsed = false;
+
   if(lvl===1) buildLevel1();
   else if(lvl===2) buildLevel2();
   else if(lvl===3){
@@ -1889,6 +1898,25 @@ function rewardBone(amount){
 const floatingTexts = [];
 function showFloatingText(txt, x, y, col){
   floatingTexts.push({text:txt, x, y, col:col||'#ffd34d', life:60, vy:-0.8});
+}
+
+// Activa el SKIN DE SÚPER PERRO (traje + antifaz): durante powerUpT mata al tocar.
+// Por defecto 20s (1200 frames). El hueso mágico clásico usa 10s.
+function activateSuperSkin(dur){
+  powerUpT = dur || 1200;
+  const secs = Math.round((dur || 1200) / 60);
+  if(P){
+    burst(P.x+P.w/2, P.y, '#2a52d8', 22, 1.4);
+    burst(P.x+P.w/2, P.y, '#ffd34d', 16, 1.3);
+    burst(P.x+P.w/2, P.y, '#cc1818', 14, 1.2);
+    showFloatingText('★ ¡SÚPER PERRO! ' + secs + 's ★', P.x+P.w/2, P.y-14, '#ffd34d');
+  }
+  cam.shakeT = 12;
+  sfxTone(523, 0.10, {type:'square', vol:0.32});
+  sfxTone(659, 0.10, {type:'square', vol:0.32, delay:0.06});
+  sfxTone(784, 0.10, {type:'square', vol:0.32, delay:0.12});
+  sfxTone(1046, 0.15, {type:'square', vol:0.36, delay:0.18});
+  sfxTone(1318, 0.20, {type:'triangle', vol:0.36, delay:0.26});
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2160,6 +2188,13 @@ function buildLevel1(){
   window._pipeEntryX = 143*TILE;          // centro de la boca (entre los 2 tiles de ancho)
   window._pipeEntryTopY = 9*TILE;          // tope donde el jugador se para
   firehydrant(165, 2);
+
+  // Entrada al CUARTO SECRETO DEL MINI JEFE (rata gigante) — sólo en 3-1.
+  // Usa la boca de incendio de x=70 (el Bubble Bobble sigue en x=142).
+  if(worldNum === 3){
+    window._miniEntryX = 70*TILE + TILE;   // centro de la boca (tiles 70 y 71)
+    window._miniEntryY = (12 - 2)*TILE;     // h=2 → tope en fila 10
+  }
 
   // Escalera y bandera
   for(let s=0; s<8; s++){
@@ -2443,6 +2478,15 @@ function buildLevel2(){
     eyeTrack: 0,          // dirección a la que miran los ojos
     bobPhase: 0           // respiración corporal
   };
+
+  // Entrada al CUARTO SECRETO DEL MINI JEFE (rata gigante) — sólo en 3-2.
+  // La caverna no tiene bocas: agregamos un TUBO VERDE sobre el suelo en x=78.
+  if(worldNum === 3){
+    pipe(78, 2);                            // ptop fila 11, pbod fila 10
+    window._miniEntryX = 78*TILE + TILE;
+    window._miniEntryY = (12 - 2)*TILE;     // tope en fila 10
+  }
+
   applyWorldModifiers();
   removeBlockedItems();
 }
@@ -2717,6 +2761,13 @@ function buildLevel3Henhouse(){
 
   // Postes (firehydrants reusados como decoración)
   firehydrant(34, 2); firehydrant(80, 2); firehydrant(135, 2); firehydrant(190, 2); firehydrant(248, 3);
+
+  // Entrada al CUARTO SECRETO DEL MINI JEFE (rata gigante) — en 2-3 y 3-3.
+  // Usa la boca de incendio central de x=135.
+  if(worldNum === 2 || worldNum === 3){
+    window._miniEntryX = 135*TILE + TILE;
+    window._miniEntryY = (12 - 2)*TILE;     // h=2 → tope en fila 10
+  }
 
   // CABLES DE LUZ — DOS líneas CONTINUAS de punta a punta (sin cortes ni saltos de altura).
   // Las ardillas y gaviotas posadas se ubican exactamente sobre una de estas dos alturas.
@@ -3394,6 +3445,18 @@ function hitBlock(t){
       sfxTone(880, 0.08, {type:'square', vol:0.35, delay:0.06});
       sfxTone(1320, 0.10, {type:'square', vol:0.35, delay:0.12});
       sfxTone(1760, 0.15, {type:'triangle', vol:0.30, delay:0.20});
+    } else if(Math.random() < 0.12){
+      // DISFRAZ DE SÚPER PERRO (aleatorio ~12%): traje + antifaz.
+      // 20 segundos matando enemigos sólo con tocarlos.
+      items.push({x:t.x+2, y:t.y-2, w:16, h:16, alive:true, ft:0,
+        popup:true, pvy:-4.6, ptimer:64, costume:true});
+      burst(t.x+TILE/2, t.y+TILE/2, '#2a52d8', 16);
+      burst(t.x+TILE/2, t.y+TILE/2, '#ffd34d', 12);
+      burst(t.x+TILE/2, t.y+TILE/2, '#cc1818', 10);
+      cam.shakeT = 10;
+      sfxTone(523, 0.08, {type:'square', vol:0.33});
+      sfxTone(784, 0.08, {type:'square', vol:0.33, delay:0.06});
+      sfxTone(1046, 0.12, {type:'square', vol:0.33, delay:0.12});
     } else {
       items.push({x:t.x+5, y:t.y-2, w:10, h:10, alive:true, ft:0,
         popup:true, pvy:-4, ptimer:42, golden:true});
@@ -5206,7 +5269,11 @@ function updateItems(){
       c.y += c.pvy; c.pvy += 0.32; c.ptimer--;
       if(c.ptimer <= 0){
         c.alive = false;
-        if(c.lifeBonus){
+        if(c.costume){
+          activateSuperSkin();
+        } else if(c.magicBone){
+          activateSuperSkin(600);   // 10s para el hueso mágico clásico
+        } else if(c.lifeBonus){
           lives++; hud();
           showFloatingText('+1 ♥', c.x, c.y, '#ff80a0');
           burst(c.x+5, c.y, '#ff6080', 16);
@@ -5224,20 +5291,10 @@ function updateItems(){
     }
     if(!P.dead && aabb(P, c)){
       c.alive = false;
-      if(c.magicBone){
-        // POWER-UP: 10 segundos de invulnerabilidad + capa roja + antiparras
-        powerUpT = 600;  // 60fps × 10s
-        burst(c.x+7, c.y, '#ff40ff', 24, 1.4);
-        burst(c.x+7, c.y, '#ffff80', 18, 1.3);
-        burst(c.x+7, c.y, '#40d0ff', 14, 1.2);
-        showFloatingText('★ ¡SUPER PERRO! 10s ★', P.x+P.w/2, P.y-14, '#ff40ff');
-        cam.shakeT = 12;
-        // Sonido épico de power-up (arpegio ascendente)
-        sfxTone(523, 0.10, {type:'square', vol:0.32});
-        sfxTone(659, 0.10, {type:'square', vol:0.32, delay:0.06});
-        sfxTone(784, 0.10, {type:'square', vol:0.32, delay:0.12});
-        sfxTone(1046, 0.15, {type:'square', vol:0.36, delay:0.18});
-        sfxTone(1318, 0.20, {type:'triangle', vol:0.36, delay:0.26});
+      if(c.costume){
+        activateSuperSkin();   // 20s skin de superhéroe
+      } else if(c.magicBone){
+        activateSuperSkin(600);
       } else if(c.lifeBonus){
         lives++; hud();
         showFloatingText('+1 ♥', c.x, c.y, '#ff80a0');
@@ -5414,6 +5471,15 @@ function updatePlayerBullets(){
       }
     }
     if(!b.alive) continue;
+    // Colisión con MINI JEFE (rata gigante, cuarto secreto)
+    if(window._inMiniBoss && miniBoss && !miniBoss.dead){
+      const mb = miniBoss;
+      if(b.x+5>mb.x && b.x<mb.x+mb.w && b.y+5>mb.y && b.y<mb.y+mb.h){
+        b.alive = false;
+        damageMiniBoss(1);
+        continue;
+      }
+    }
     // Colisión con jefe (gato rey nivel 2, carpincho madre nivel 5)
     if(boss && boss.alive){
       if(b.x+5>boss.x && b.x<boss.x+boss.w && b.y+5>boss.y && b.y<boss.y+boss.h){
@@ -5521,6 +5587,26 @@ function checkSubLevelEntry(){
     const playerFootY = P.y + P.h;
     if(P.onGround && Math.abs(playerCenterX - cx) < TILE && Math.abs(playerFootY - cy) < 8){
       exitSubLevel4();
+    }
+  }
+  // ENTRADA al CUARTO SECRETO DEL MINI JEFE (rata gigante): boca/tubo gateado por nivel
+  if(!inSubLevel && !miniBossUsed && window._miniEntryX != null){
+    const cx = window._miniEntryX;
+    const cy = window._miniEntryY;
+    const playerCenterX = P.x + P.w/2;
+    const playerFootY = P.y + P.h;
+    if(P.onGround && Math.abs(playerCenterX - cx) < TILE && Math.abs(playerFootY - cy) < 8){
+      enterMiniBoss();
+    }
+  }
+  // SALIDA del cuarto del mini jefe: tubo verde dentro de la sala
+  if(window._inMiniBoss && window._miniBossExitX != null){
+    const cx = window._miniBossExitX;
+    const cy = window._miniBossExitY;
+    const playerCenterX = P.x + P.w/2;
+    const playerFootY = P.y + P.h;
+    if(P.onGround && Math.abs(playerCenterX - cx) < TILE && Math.abs(playerFootY - cy) < 8){
+      exitMiniBoss();
     }
   }
 }
@@ -5890,6 +5976,262 @@ function buildSubLevel4(){
   P.vx = 0; P.vy = 0;
   cam.x = 0;
   removeBlockedItems();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  CUARTO SECRETO DEL MINI JEFE — RATA GIGANTE
+//  Entradas (gateadas por nivel): boca x=70 en 3-1, tubo verde x=78 en 3-2,
+//  boca x=135 en 2-3 y 3-3. Sala cerrada tipo arena.
+//  La rata persigue y embiste. Se la daña pisándola o a tiros (HP=4),
+//  o con el disfraz de súper perro al tocarla. Al ganarle: vida + munición
+//  + disfraz garantizado. El tubo verde de salida está siempre disponible.
+// ═══════════════════════════════════════════════════════════════
+function enterMiniBoss(){
+  savedMainState = {
+    tiles: tiles.map(t => ({...t})),
+    enemies: enemies.map(e => ({...e})),
+    items: items.map(i => ({...i})),
+    parts: [],
+    bones: bones,
+    shots: shots,
+    camX: cam.x,
+    flagX: window._flagX,
+    waterCopy: water ? {...water} : null,
+    artifactsCopy: window._artifacts ? window._artifacts.map(a => ({...a})) : [],
+    powerLinesCopy: window._powerLines ? JSON.parse(JSON.stringify(window._powerLines)) : null,
+    // Punto de retorno = tope de la entrada
+    playerX: window._miniEntryX - P.w/2,
+    playerY: window._miniEntryY - P.h,
+    isMiniBoss: true
+  };
+  inSubLevel = true;
+  window._inMiniBoss = true;
+  miniBossUsed = true;
+  buildMiniBossRoom();
+  bgDirty = true;
+  hud();
+}
+
+function exitMiniBoss(){
+  if(!savedMainState || !savedMainState.isMiniBoss) return;
+  tiles = savedMainState.tiles.map(t => ({...t}));
+  enemies = savedMainState.enemies.map(e => ({...e}));
+  items = savedMainState.items.map(i => ({...i}));
+  parts = [];
+  playerBullets = [];
+  bones = savedMainState.bones;
+  window._flagX = savedMainState.flagX;
+  water = savedMainState.waterCopy ? {...savedMainState.waterCopy} : null;
+  window._artifacts = savedMainState.artifactsCopy.map(a => ({...a}));
+  window._powerLines = savedMainState.powerLinesCopy;
+  const backX = savedMainState.playerX;
+  const backY = savedMainState.playerY;
+  window._miniBossExitX = null; window._miniBossExitY = null;
+  inSubLevel = false;
+  window._inMiniBoss = false;
+  miniBoss = null;
+  savedMainState = null;
+  P.x = backX; P.y = backY;
+  P.vx = 0; P.vy = 0;
+  cam.x = Math.max(0, P.x - CW/2);
+  bgDirty = true;
+  hud();
+  burst(P.x+P.w/2, P.y+P.h/2, '#1aa020', 16);
+  sfxTone(440, 0.08, {type:'square', vol:0.3});
+  sfxTone(660, 0.10, {type:'square', vol:0.3, delay:0.06});
+}
+
+function buildMiniBossRoom(){
+  tiles = []; enemies = []; items = []; parts = [];
+  playerBullets = [];
+  window._flagX = 99999999;
+  window._princess = null;
+  window._artifacts = [];
+  window._pipeEntryX = null; window._pipeExitX = null;
+  window._cave4EntryX = null; window._cave4ExitX = null;
+  window._powerLines = null;
+  window._bossProjectiles = [];
+  water = null;
+
+  const SW = 30, SH = 14;
+  // Suelo
+  for(let x=0; x<SW; x++){ T(x, SH-1, 'dngnd'); T(x, SH-2, 'dngnd'); }
+  // Techo
+  for(let x=0; x<SW; x++){ T(x, 0, 'stone'); T(x, 1, 'stone'); }
+  // Paredes
+  for(let y=2; y<SH-2; y++){ T(0,y,'stone'); T(1,y,'stone'); T(SW-2,y,'stone'); T(SW-1,y,'stone'); }
+  // Plataformas para que el jugador suba y caiga sobre la rata
+  for(let x=3;  x<=7;  x++) T(x, 8, 'sld');
+  for(let x=22; x<=26; x++) T(x, 8, 'sld');
+  for(let x=12; x<=17; x++) T(x, 5, 'sld');
+
+  // Tubo verde de SALIDA (siempre disponible, para no quedar trabado)
+  const exitTx = 26, exitH = 2;
+  for(let r=0;r<exitH;r++){
+    T(exitTx,   SH-3-r, r===0?'ptop':'pbod');
+    T(exitTx+1, SH-3-r, r===0?'ptop':'pbod');
+  }
+  window._miniBossExitX = exitTx*TILE + TILE;
+  window._miniBossExitY = (SH-3-exitH+1)*TILE;
+
+  // Unos huesitos de premio en las plataformas
+  for(let x=3;  x<=7;  x++) addBone(x, 7);
+  for(let x=22; x<=26; x++) addBone(x, 7);
+  for(let x=13; x<=16; x++) addBone(x, 4);
+
+  // EL MINI JEFE: rata gigante
+  const mbW = 46, mbH = 32;
+  miniBoss = {
+    x: (SW/2)*TILE - mbW/2, y: (SH-2)*TILE - mbH,
+    w: mbW, h: mbH,
+    vx: 0, vy: 0, dir: -1,
+    hp: 4, maxHp: 4,
+    hitFlash: 0, ft: 0, fr: 0, tailT: 0,
+    dead: false, deadT: 0,
+    baseSpd: 1.05, dashSpd: 3.4,
+    charge: -90, stun: 0, intro: 75,
+    breathT: 0
+  };
+
+  // Jugador entra por la izquierda
+  P.x = 3*TILE;
+  P.y = (SH-3)*TILE - P.h;
+  P.vx = 0; P.vy = 0;
+  cam.x = 0;
+  removeBlockedItems();
+
+  // Rugido de presentación
+  cam.shakeT = 14;
+  sfxTone(160, 0.18, {type:'sawtooth', vol:0.34});
+  sfxTone(120, 0.24, {type:'sawtooth', vol:0.30, delay:0.10});
+  showFloatingText('¡RATA GIGANTE!', (SW/2)*TILE, 4*TILE, '#ff6060');
+}
+
+function damageMiniBoss(n){
+  const mb = miniBoss;
+  if(!mb || mb.dead) return;
+  mb.hp -= n;
+  mb.hitFlash = 14;
+  mb.stun = 18;
+  burst(mb.x+mb.w/2, mb.y+10, '#ffd34d', 12);
+  burst(mb.x+mb.w/2, mb.y+10, '#ffffff', 6);
+  sfxHurt();
+  cam.shakeT = 8;
+  if(mb.hp <= 0) defeatMiniBoss();
+}
+
+function defeatMiniBoss(){
+  const mb = miniBoss;
+  if(!mb || mb.dead) return;
+  mb.dead = true; mb.deadT = 0; mb.vy = -4; mb.vx = 0;
+  cam.shakeT = 26;
+  burst(mb.x+mb.w/2, mb.y+mb.h/2, '#ffd34d', 40, 1.5);
+  burst(mb.x+mb.w/2, mb.y+mb.h/2, '#ff4040', 26, 1.4);
+  showFloatingText('★ ¡GANASTE! ★', mb.x+mb.w/2, mb.y-6, '#ffd34d');
+  // RECOMPENSA: vida + munición + disfraz garantizado
+  shots += 10; hud();
+  items.push({x:mb.x+mb.w/2-6, y:mb.y, w:12, h:12, alive:true, ft:0,
+    popup:true, pvy:-5, ptimer:55, lifeBonus:true});
+  items.push({x:mb.x+mb.w/2+8, y:mb.y, w:16, h:16, alive:true, ft:0,
+    popup:true, pvy:-4.6, ptimer:70, costume:true});
+  sfxTone(523, 0.10, {type:'square', vol:0.34});
+  sfxTone(784, 0.10, {type:'square', vol:0.34, delay:0.08});
+  sfxTone(1046, 0.18, {type:'triangle', vol:0.34, delay:0.16});
+}
+
+function updateMiniBoss(){
+  const mb = miniBoss;
+  if(!mb) return;
+  mb.ft++; if(mb.ft > 10){ mb.ft = 0; mb.fr ^= 1; }
+  if(mb.hitFlash > 0) mb.hitFlash--;
+  mb.breathT += 0.08;
+  const floorTopY = (14 - 2)*TILE;       // SH-2
+  const innerL = 2*TILE, innerR = (30 - 2)*TILE - mb.w;
+
+  if(mb.dead){
+    mb.deadT++;
+    mb.vy = Math.min(mb.vy + GRAV, MAX_VY);
+    mb.y += mb.vy;
+    if(mb.y + mb.h > floorTopY){ mb.y = floorTopY - mb.h; mb.vy = 0; }
+    return;
+  }
+
+  if(mb.stun > 0) mb.stun--;
+  if(mb.intro > 0) mb.intro--;
+
+  // IA: perseguir al jugador; embestida ocasional cuando está alineado
+  const toPlayer = (P.x + P.w/2) > (mb.x + mb.w/2) ? 1 : -1;
+  mb.charge--;
+  if(mb.intro === 0 && mb.charge <= -90 && mb.stun === 0 && Math.abs((P.y+P.h) - (mb.y+mb.h)) < 1.5*TILE){
+    if(Math.random() < 0.04){ mb.charge = 42; mb.dir = toPlayer; sfxTone(220,0.1,{type:'sawtooth',vol:0.25}); }
+  }
+  let spd = mb.intro > 0 ? mb.baseSpd*0.4 : mb.baseSpd;
+  let moveDir = toPlayer;
+  if(mb.charge > 0){ spd = mb.dashSpd; moveDir = mb.dir; }
+  if(mb.stun > 0) spd = 0;
+  mb.vx += (moveDir * spd - mb.vx) * 0.12;
+  mb.x += mb.vx;
+  if(Math.abs(mb.vx) > 0.05) mb.dir = mb.vx >= 0 ? 1 : -1;
+
+  // Gravedad + suelo plano
+  mb.vy = Math.min(mb.vy + GRAV, MAX_VY);
+  mb.y += mb.vy;
+  if(mb.y + mb.h > floorTopY){ mb.y = floorTopY - mb.h; mb.vy = 0; }
+  // Paredes
+  if(mb.x < innerL){ mb.x = innerL; mb.vx = Math.abs(mb.vx)*0.5; mb.charge = -90; }
+  if(mb.x > innerR){ mb.x = innerR; mb.vx = -Math.abs(mb.vx)*0.5; mb.charge = -90; }
+
+  // Colisión con el jugador
+  if(!P.dead && P.inv === 0){
+    const hb = {x:mb.x+4, y:mb.y+4, w:mb.w-8, h:mb.h-6};
+    if(aabb(P, hb)){
+      if(powerUpT > 0){
+        // Disfraz de súper perro: lo liquida al toque
+        damageMiniBoss(mb.hp);
+        P.vy = -5;
+      } else if(P.vy > 0.4 && (P.y + P.h) < mb.y + mb.h*0.5){
+        // Pisotón
+        damageMiniBoss(1);
+        P.vy = -7.2;
+      } else {
+        P.dead = true; cam.shakeT = 14; sfxHurt();
+        burst(P.x+P.w/2, P.y+P.h/2, '#ff2020', 16);
+      }
+    }
+  }
+}
+
+function drawMiniBoss(){
+  const mb = miniBoss;
+  if(!mb) return;
+  const sx = mb.x - cam.x, sy = mb.y;
+  // Cuerpo de rata gigante (reutiliza el dibujo paramétrico de la rata)
+  drawRat(mb, sx, sy);
+  // Destello blanco al recibir daño
+  if(mb.hitFlash > 0 && (mb.hitFlash % 4 < 2)){
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.beginPath();
+    ctx.ellipse(sx + mb.w/2, sy + mb.h*0.6, mb.w/2, mb.h*0.4, 0, 0, Math.PI*2);
+    ctx.fill();
+  }
+  if(mb.dead) return;
+
+  // Detalles de "jefe": ojos rojos brillantes + cejas enojadas
+  const eyeX = sx + (mb.dir > 0 ? mb.w*0.72 : mb.w*0.28);
+  const eyeY = sy + mb.h*0.5;
+  ctx.fillStyle = '#ff2020';
+  ctx.beginPath(); ctx.arc(eyeX, eyeY, 2.4, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#ffd0d0';
+  ctx.fillRect(eyeX-0.6, eyeY-0.6, 1, 1);
+
+  // Barra de vida arriba de la rata
+  const bw = mb.w, bx = sx, by = sy - 10;
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(bx-1, by-1, bw+2, 5);
+  ctx.fillStyle = '#3a1010';
+  ctx.fillRect(bx, by, bw, 3);
+  ctx.fillStyle = '#ff4040';
+  ctx.fillRect(bx, by, bw * Math.max(0, mb.hp)/mb.maxHp, 3);
 }
 
 function checkFlag(){
@@ -7200,70 +7542,83 @@ function drawDog(wx, wy){
     drawSkateBoardOnDog(x, y);
   }
 
-  // POWER-UP: capa roja flotante + antiparras rojo/azul
+  // SKIN SÚPER PERRO: traje de superhéroe + antifaz + capa (mientras powerUpT > 0)
   if(powerUpT > 0){
     const blink = powerUpT < 90 ? ((fc/4|0) % 2 === 0) : true;  // parpadea al final
     if(blink){
+      const suitBlue = '#2a52d8', suitBlueD = '#16338f';
       // ── CAPA ROJA detrás del perro ──
-      // Posicionada en la grupa, ondulando con el movimiento
       const capeWave = Math.sin(fc*0.18) * 2;
       const capeX = x + (d > 0 ? 2 : P.w - 4);
-      const capeY = y + 4;
+      const capeY = y + 3;
       ctx.fillStyle = '#cc1818';
       ctx.beginPath();
       ctx.moveTo(capeX, capeY);
-      ctx.lineTo(capeX - d*8 + capeWave, capeY + 4);
-      ctx.lineTo(capeX - d*10 + capeWave, capeY + 14);
-      ctx.lineTo(capeX - d*6, capeY + 16);
-      ctx.lineTo(capeX - d*3, capeY + 10);
+      ctx.lineTo(capeX - d*9 + capeWave, capeY + 4);
+      ctx.lineTo(capeX - d*12 + capeWave, capeY + 16);
+      ctx.lineTo(capeX - d*6, capeY + 18);
+      ctx.lineTo(capeX - d*3, capeY + 11);
       ctx.lineTo(capeX, capeY + 8);
       ctx.closePath();
       ctx.fill();
-      // Borde de la capa más oscuro
-      ctx.fillStyle = '#8a1010';
+      ctx.fillStyle = '#8a1010';   // sombra de la capa
       ctx.beginPath();
-      ctx.moveTo(capeX - d*8 + capeWave, capeY + 4);
-      ctx.lineTo(capeX - d*10 + capeWave, capeY + 14);
-      ctx.lineTo(capeX - d*7 + capeWave*0.5, capeY + 13);
-      ctx.lineTo(capeX - d*6 + capeWave*0.5, capeY + 4);
+      ctx.moveTo(capeX - d*9 + capeWave, capeY + 4);
+      ctx.lineTo(capeX - d*12 + capeWave, capeY + 16);
+      ctx.lineTo(capeX - d*9 + capeWave*0.5, capeY + 15);
+      ctx.lineTo(capeX - d*7 + capeWave*0.5, capeY + 4);
       ctx.closePath();
       ctx.fill();
-      // Brillo en la capa (estrella amarilla)
+
+      // ── TRAJE: malla azul cubriendo el lomo + cinturón ──
+      const suitY = y + P.h - 12;
+      ctx.fillStyle = suitBlue;
+      ctx.beginPath();
+      ctx.roundRect(x + 2, suitY, P.w - 4, 9, 3);
+      ctx.fill();
+      ctx.fillStyle = suitBlueD;
+      ctx.fillRect(x + 3, suitY + 5, P.w - 6, 2);
+      ctx.fillStyle = '#ffd34d';        // cinturón dorado
+      ctx.fillRect(x + 2, suitY + 7, P.w - 4, 1.6);
+
+      // ── EMBLEMA (estrella) en el costado que mira al frente ──
+      const emX = x + (d > 0 ? P.w - 9 : 5), emY = suitY + 3.5;
+      const pts = [];
+      for(let i=0;i<10;i++){
+        const a = -Math.PI/2 + i*Math.PI/5;
+        const rr = (i%2===0) ? 3 : 1.3;
+        pts.push([emX + Math.cos(a)*rr, emY + Math.sin(a)*rr]);
+      }
       ctx.fillStyle = '#ffd34d';
-      ctx.fillRect(capeX - d*6, capeY + 9, 1.5, 1.5);
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for(let i=1;i<10;i++) ctx.lineTo(pts[i][0], pts[i][1]);
+      ctx.closePath();
+      ctx.fill();
 
-      // ── ANTIPARRAS (gafas) rojo/azul sobre los ojos del perro ──
-      // Encontrar la posición de la cabeza/ojos
-      const headX = x + (d > 0 ? P.w - 9 : 0);
-      const headY = y + 2;
-      // Lente izquierda (rojo)
-      ctx.fillStyle = '#ff2030';
+      // ── ANTIFAZ (máscara de superhéroe) sobre los ojos ──
+      const mX = x + (d > 0 ? P.w - 10 : -1), mY = y + 2;
+      ctx.fillStyle = '#1530a0';
       ctx.beginPath();
-      ctx.arc(headX + 2, headY + 2, 2.2, 0, Math.PI*2);
+      ctx.moveTo(mX, mY + 1);
+      ctx.lineTo(mX + 10, mY + 1);
+      ctx.lineTo(mX + 10, mY + 4.5);
+      ctx.lineTo(mX + 5, mY + 6);
+      ctx.lineTo(mX, mY + 4.5);
+      ctx.closePath();
       ctx.fill();
-      // Lente derecha (azul)
-      ctx.fillStyle = '#2080ff';
+      // Punta lateral del antifaz (ala hacia atrás)
       ctx.beginPath();
-      ctx.arc(headX + 6, headY + 2, 2.2, 0, Math.PI*2);
+      ctx.moveTo(mX + (d>0?9:1), mY + 1);
+      ctx.lineTo(mX + (d>0?13:-3), mY - 2);
+      ctx.lineTo(mX + (d>0?9:1), mY + 3);
       ctx.fill();
-      // Marco oscuro
-      ctx.strokeStyle = '#1a1a1a';
-      ctx.lineWidth = 0.8;
-      ctx.beginPath();
-      ctx.arc(headX + 2, headY + 2, 2.2, 0, Math.PI*2);
-      ctx.arc(headX + 6, headY + 2, 2.2, 0, Math.PI*2);
-      ctx.stroke();
-      // Puente entre lentes
-      ctx.beginPath();
-      ctx.moveTo(headX + 4, headY + 2);
-      ctx.lineTo(headX + 4, headY + 2.5);
-      ctx.stroke();
-      // Reflejos blancos
+      // Ranuras blancas de los ojos
       ctx.fillStyle = '#fff';
-      ctx.fillRect(headX + 1, headY + 1, 0.8, 0.8);
-      ctx.fillRect(headX + 5, headY + 1, 0.8, 0.8);
+      ctx.fillRect(mX + 2, mY + 2.4, 2.4, 1.6);
+      ctx.fillRect(mX + 5.6, mY + 2.4, 2.4, 1.6);
 
-      // Aura mágica alrededor (partículas)
+      // ── AURA mágica alrededor ──
       if(fc % 4 === 0){
         const ang = Math.random() * Math.PI * 2;
         const r = 16 + Math.random()*4;
@@ -7272,7 +7627,7 @@ function drawDog(wx, wy){
           y: P.y + P.h/2 + Math.sin(ang)*r,
           vx: Math.cos(ang)*0.5,
           vy: Math.sin(ang)*0.5 - 0.3,
-          col: Math.random() > 0.5 ? '#ff40ff' : '#40d0ff',
+          col: Math.random() > 0.5 ? '#ffd34d' : '#40d0ff',
           life: 20, ml: 24, sz: 2
         });
       }
@@ -8950,6 +9305,42 @@ function drawGoldenBone(c){
   ctx.fillRect(x+1, y+1+bob, 2, 1);
 }
 
+// Ícono del disfraz de súper perro (antifaz con capa) mientras salta del bloque
+function drawCostumeItem(c){
+  const x = c.x - cam.x, y = c.y;
+  if(x < -20 || x > CW + 20) return;
+  const bob = Math.sin(c.ft*0.16) * 3;
+  const glow = 0.5 + Math.sin(c.ft*0.2)*0.5;
+  const cx = x + 8, cy = y + 7 + bob;
+  // Aura
+  ctx.fillStyle = `rgba(255,210,80,${0.16 + glow*0.2})`;
+  ctx.beginPath(); ctx.arc(cx, cy, 13, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = `rgba(60,120,255,${0.14 + glow*0.16})`;
+  ctx.beginPath(); ctx.arc(cx, cy, 9, 0, Math.PI*2); ctx.fill();
+  // Capa roja detrás
+  ctx.fillStyle = '#cc1818';
+  ctx.beginPath();
+  ctx.moveTo(cx-7, cy-3); ctx.lineTo(cx-10, cy+7); ctx.lineTo(cx-2, cy+5);
+  ctx.lineTo(cx+2, cy+5); ctx.lineTo(cx+10, cy+7); ctx.lineTo(cx+7, cy-3);
+  ctx.closePath(); ctx.fill();
+  // Antifaz azul (máscara)
+  ctx.fillStyle = '#1f3fc0';
+  ctx.beginPath();
+  ctx.moveTo(cx-7, cy-3); ctx.lineTo(cx+7, cy-3);
+  ctx.lineTo(cx+6, cy+2); ctx.lineTo(cx, cy+3); ctx.lineTo(cx-6, cy+2);
+  ctx.closePath(); ctx.fill();
+  // Puntas laterales
+  ctx.beginPath(); ctx.moveTo(cx-6, cy-3); ctx.lineTo(cx-10, cy-5); ctx.lineTo(cx-5, cy-1); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(cx+6, cy-3); ctx.lineTo(cx+10, cy-5); ctx.lineTo(cx+5, cy-1); ctx.fill();
+  // Ranuras de ojos
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(cx-4.5, cy-2, 3, 2);
+  ctx.fillRect(cx+1.5, cy-2, 3, 2);
+  // Estrellita arriba
+  ctx.fillStyle = '#ffd34d';
+  ctx.fillRect(cx-0.7, cy-9 + Math.sin(c.ft*0.3), 1.6, 1.6);
+}
+
 function drawLifeItem(c){
   const x = c.x - cam.x, y = c.y;
   const bob = Math.sin(c.ft*0.13) * 2;
@@ -9702,6 +10093,8 @@ function render(){
     if(it.x + 14 < camLeft || it.x > camRight) continue;
     if(it.life){
       drawLifeItem(it);
+    } else if(it.costume || it.magicBone){
+      drawCostumeItem(it);
     } else if(it.golden){
       drawGoldenBone(it);
     } else if(it.coin){
@@ -9718,9 +10111,10 @@ function render(){
   }
 
   // boss
-  if((level === 2 || level === 5) && boss){
+  if((level === 2 || level === 5) && boss && !window._inMiniBoss){
     drawBoss();
   }
+  if(window._inMiniBoss) drawMiniBoss();
   drawBossProjectiles();
 
   // Portal de salida del subnivel 4 (cueva atajo) — arco de piedra + vórtice giratorio
@@ -9893,14 +10287,15 @@ function step(){
     if(level < 4){
       updatePlayer();
       updateEnemies();
-      if(level === 2) updateBoss();
+      if(window._inMiniBoss) updateMiniBoss();
+      else if(level === 2) updateBoss();
       updateFallTiles();
       updateItems();
       updatePlayerBullets();
       updateBossProjectiles();
       updateParts();
       updateArtifacts();
-      if(level === 3) updateSkateboard();
+      if(level === 3 && !window._inMiniBoss) updateSkateboard();
       checkSubLevelEntry();
       checkFlag();
     } else {
