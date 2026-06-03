@@ -2012,29 +2012,29 @@ function spawnSparrows(n){
   let maxX = 0;
   for(const t of tiles) if(t.x > maxX) maxX = t.x;
   const rangeEnd = Math.min(maxX, (window._flagX || maxX) - 4*TILE);
+  const rangeTiles = Math.max(20, Math.floor(rangeEnd / TILE) - 6);
   for(let i=0; i<n; i++){
-    const ex = 20 + ((i*13 + 7) % Math.floor(rangeEnd / TILE - 15));
-    const ey = 2 + (i % 5);
-    const dir = (i % 2 === 0) ? 1 : -1;
-    const baseSpeed = 1.3 * enemySpeedMul;
+    // Repartidos a lo ancho del nivel y a alturas variadas (sin patrón rígido)
+    const ex = 12 + ((i * 17 + 9) % rangeTiles);
+    const ey = 2 + (i % 6);
+    const maxSpd = 1.55 * enemySpeedMul;
     enemies.push({
       x: ex * TILE, y: ey * TILE,
       w: 12, h: 10,
-      vx: baseSpeed * dir, vy: 0, dir: dir,
+      vx: (Math.random()-0.5) * maxSpd, vy: (Math.random()-0.5) * maxSpd,
+      dir: 1,
       alive: true, dead: false, deadT: 0, fr: 0, ft: 0,
       type: 'fly', kind: 'sparrow',
-      baseSpd: baseSpeed,
-      jumpT: 0,
+      baseSpd: maxSpd,
+      maxSpd: maxSpd,
       onGround: false,
       breathT: Math.random()*Math.PI*2,
-      flyBaseY: ey * TILE,
-      flyAmpY: 2.5 * TILE,
-      flyPhase: Math.random()*Math.PI*2,
-      flySpeedY: 0.06 + Math.random()*0.04,  // más rápido y errático
-      homeX: ex * TILE, patrolRange: 16*TILE,
-      erratic: true,
-      erraticTimer: 0,
-      erraticDir: dir
+      // ── IA de NPC: vuela libre hacia objetivos que elige solo, y se posa ──
+      wanderTX: ex * TILE, wanderTY: ey * TILE,
+      retargetT: 30 + (Math.random()*60|0),
+      seekPerch: false,
+      perched: false,
+      perchY: 0, perchTileTop: 0, restT: 0
     });
   }
 }
@@ -3716,6 +3716,128 @@ function updateEnemies(){
     // Vuela horizontal con oscilación vertical (zigzag). NO tiene gravedad.
     // Sí se puede matar saltándole encima.
     if(e.type === 'fly'){
+      // ═══ GORRIÓN: IA de NPC — vuelo libre + posarse + asustarse del jugador ═══
+      if(e.kind === 'sparrow'){
+        e.ft++;
+        if(e.ft > 6){ e.ft = 0; e.fr ^= 1; }   // aleteo rápido
+        e.breathT += 0.05;
+        const minX = 2*TILE;
+        const maxXlvl = (window._flagX || 220*TILE) - 3*TILE;
+        const minY = TILE, maxYair = 9*TILE;
+
+        // ── POSADO: descansa sobre algo y despega solo (o si lo asustás) ──
+        if(e.perched){
+          e.y = e.perchY; e.vx = 0; e.vy = 0;
+          e.restT--;
+          const startled = Math.hypot(P.x - e.x, P.y - e.y) < 3.2*TILE;
+          if(e.restT <= 0 || startled){
+            e.perched = false; e.seekPerch = false; e.retargetT = 0;
+            e.vy = -1.4;
+            e.vx = (startled ? (P.x > e.x ? -1 : 1) : (Math.random()<0.5?-1:1)) * e.maxSpd;
+            if(startled) burst(e.x+e.w/2, e.y+e.h/2, '#caa37a', 7);
+          } else {
+            if(!P.dead && P.inv === 0 && active){
+              const hbp = {x:e.x+2, y:e.y+2, w:e.w-4, h:e.h-4};
+              if(aabb(P, hbp)){
+                if(powerUpT > 0 || (P.vy > 0.4 && P.y + P.h < e.y + e.h*0.6)){
+                  e.dead = true; e.deadT = 0; e.vy = -3; e.vx = 0;
+                  if(P.vy > 0) P.vy = -6.2;
+                  rewardBone(1); sfxHurt();
+                  burst(e.x+e.w/2, e.y+4, '#a06030', 12);
+                  showFloatingText('+1', e.x+e.w/2, e.y, '#ffd34d');
+                } else { P.dead = true; cam.shakeT = 12; sfxHurt(); burst(P.x+P.w/2,P.y+P.h/2,'#ff2020',16); }
+              }
+            }
+            continue;
+          }
+        }
+
+        // ── ELEGIR/REFRESCAR OBJETIVO (a veces decide posarse en algo real) ──
+        e.retargetT = (e.retargetT || 0) - 1;
+        const reached = Math.hypot((e.wanderTX||e.x) - e.x, (e.wanderTY||e.y) - e.y) < TILE*1.2;
+        if(e.retargetT <= 0 || reached){
+          if(!e.seekPerch && Math.random() < 0.30){
+            // buscar tile sólido con el tope libre, cerca, para posarse
+            let best = null, bestD = 1e9;
+            for(const t of tiles){
+              if(!SOLID.has(t.t)) continue;
+              if(t.y < 3*TILE || t.y > 11*TILE) continue;
+              let blocked = false;
+              for(const o of tiles){ if(SOLID.has(o.t) && o.x === t.x && o.y === t.y - TILE){ blocked = true; break; } }
+              if(blocked) continue;
+              const d = Math.abs(t.x - e.x);
+              if(d > 2*TILE && d < 22*TILE && d < bestD){ bestD = d; best = t; }
+            }
+            if(best){
+              e.seekPerch = true;
+              e.perchTileTop = best.y;
+              e.wanderTX = best.x + 1;
+              e.wanderTY = best.y - e.h - 2;
+              e.retargetT = 600;
+            }
+          }
+          if(!e.seekPerch){
+            // objetivo aéreo libre, sin posiciones prefijadas
+            e.wanderTX = minX + Math.random() * (maxXlvl - minX);
+            e.wanderTY = minY + Math.random() * (maxYair - minY);
+            e.retargetT = 70 + (Math.random()*90|0);
+          }
+        }
+
+        // ── ASUSTARSE: si el jugador se acerca, vuela en sentido opuesto ──
+        let tgX = e.wanderTX, tgY = e.wanderTY;
+        const dxP = e.x - P.x, dyP = e.y - P.y;
+        if(Math.hypot(dxP, dyP) < 3.5*TILE){
+          const a = Math.atan2(dyP, dxP);
+          tgX = e.x + Math.cos(a) * 6*TILE;
+          tgY = e.y + Math.sin(a) * 4*TILE - TILE;
+          e.seekPerch = false;
+        }
+
+        // ── STEERING suave hacia el objetivo (nada de teletransportes) ──
+        const ang = Math.atan2(tgY - e.y, tgX - e.x);
+        e.vx += (Math.cos(ang) * e.maxSpd - e.vx) * 0.10;
+        e.vy += (Math.sin(ang) * e.maxSpd - e.vy) * 0.10;
+        e.vy += Math.sin(e.breathT) * 0.06;   // bobeo natural sutil
+        const sp = Math.hypot(e.vx, e.vy);
+        if(sp > e.maxSpd){ e.vx = e.vx/sp*e.maxSpd; e.vy = e.vy/sp*e.maxSpd; }
+        e.x += e.vx; e.y += e.vy;
+        if(e.x < minX){ e.x = minX; e.vx = Math.abs(e.vx); }
+        if(e.x > maxXlvl){ e.x = maxXlvl; e.vx = -Math.abs(e.vx); }
+        if(e.y < minY){ e.y = minY; e.vy = Math.abs(e.vy)*0.5; }
+        if(e.y > maxYair){ e.y = maxYair; e.vy = -Math.abs(e.vy)*0.5; }
+        e.dir = e.vx >= 0 ? 1 : -1;
+
+        // ── POSARSE al llegar al punto sobre el tile elegido ──
+        if(e.seekPerch &&
+           Math.abs(e.x - e.wanderTX) < TILE*0.8 &&
+           Math.abs((e.y + e.h) - e.perchTileTop) < TILE*0.9 && e.vy >= -0.2){
+          e.perched = true;
+          e.perchY = e.perchTileTop - e.h;
+          e.y = e.perchY;
+          e.restT = 90 + (Math.random()*150|0);
+          e.seekPerch = false; e.vx = 0; e.vy = 0;
+        }
+
+        // ── COLISIÓN con jugador en vuelo ──
+        if(!P.dead && P.inv === 0 && active){
+          const hb = {x:e.x+2, y:e.y+2, w:e.w-4, h:e.h-4};
+          if(aabb(P, hb)){
+            if(powerUpT > 0 || (P.vy > 0.4 && P.y + P.h < e.y + e.h*0.6)){
+              e.dead = true; e.deadT = 0; e.vy = -3; e.vx = 0;
+              if(P.vy > 0) P.vy = -6.2;
+              rewardBone(1); sfxHurt();
+              burst(e.x+e.w/2, e.y+4, '#a06030', 12);
+              burst(e.x+e.w/2, e.y+4, '#ff40ff', 8);
+              showFloatingText('+1', e.x+e.w/2, e.y, '#ffd34d');
+            } else {
+              P.dead = true; cam.shakeT = 12; sfxHurt();
+              burst(P.x+P.w/2, P.y+P.h/2, '#ff2020', 16);
+            }
+          }
+        }
+        continue;
+      }
       // ─── GAVIOTA POSADA EN CABLE: queda quieta hasta que el jugador se acerca ───
       // (Las gaviotas posadas son type:'fly'; sin esto despegaban al instante.)
       if(e.perched){
@@ -3755,30 +3877,12 @@ function updateEnemies(){
       e.flyPhase += e.flySpeedY;
       // Oscilación vertical sinusoidal
       e.y = e.flyBaseY + Math.sin(e.flyPhase) * e.flyAmpY;
-      // Movimiento errático para gorriones: cambios bruscos de dirección Y y velocidad
-      if(e.erratic){
-        e.erraticTimer = (e.erraticTimer || 0) + 1;
-        // Cada 30-60 frames, sacudida vertical y posible cambio horizontal
-        if(e.erraticTimer > 30 + (Math.random()*30|0)){
-          e.erraticTimer = 0;
-          // Cambio brusco de altura base
-          e.flyBaseY = Math.max(TILE, Math.min(7*TILE, e.flyBaseY + (Math.random()-0.5) * 4 * TILE));
-          // 30% prob de cambiar dirección horizontal de golpe
-          if(Math.random() < 0.3) e.dir = -e.dir;
-        }
-        // Si jugador está cerca, perseguirlo horizontalmente con probabilidad
-        if(Math.abs(P.x - e.x) < 8*TILE && Math.random() < 0.03){
-          e.dir = (P.x > e.x) ? 1 : -1;
-        }
-      }
-      // Movimiento horizontal con patrullaje
+      // Movimiento horizontal con patrullaje (murciélagos y gaviotas que despegaron)
       const offset = e.x - e.homeX;
       if(offset > e.patrolRange && e.dir > 0){
         e.dir = -1;
-        if(e.erratic) e.homeX = e.x;  // resetear casa para que siga errático
       } else if(offset < -e.patrolRange && e.dir < 0){
         e.dir = 1;
-        if(e.erratic) e.homeX = e.x;
       }
       e.x += e.dir * e.baseSpd;
       // Colisión con jugador
@@ -3887,7 +3991,8 @@ function updateEnemies(){
     }
 
     // ─── DETECCIÓN DE BORDE ANTES DE MOVER (no caen al vacío) ───
-    if(e.type === 'walk' && e.onGround){
+    // (Los tejones en persecución NO se dan vuelta: saltan tras el jugador.)
+    if(e.type === 'walk' && e.onGround && !e.chasing){
       const lookX = e.dir > 0 ? e.x + e.w + 1 : e.x - 1;
       const probe = {x: lookX, y: e.y + e.h + 1, w: 2, h: 4};
       let hasFloor = false;
@@ -3912,14 +4017,26 @@ function updateEnemies(){
         e.jumpT = 80 + (Math.random()*70|0);
       }
     }
-    // ─── TEJÓN AGRESIVO: persigue al jugador en distancia corta ───
-    if(e.aggressive && e.kind === 'badger'){
+    // ─── TEJÓN: persigue al jugador con saltos, sin temblequear en los bordes ───
+    if(e.kind === 'badger'){
       const dxP = P.x - e.x;
+      const dyP = P.y - e.y;
       const distP = Math.abs(dxP);
-      // Persigue solo si jugador está a menos de 5 tiles (antes 8)
-      if(distP < 5 * TILE){
-        e.dir = dxP > 0 ? 1 : -1;
-        e.chaseBoost = Math.min((e.chaseBoost || 0) + 0.015, 0.35);
+      e.chasing = false;
+      if(e.aggressive && distP < 6.5 * TILE){
+        e.chasing = true;
+        // Zona muerta en la dirección: evita el flip-flop frame a frame.
+        if(distP > 0.45 * TILE) e.dir = dxP > 0 ? 1 : -1;
+        e.chaseBoost = Math.min((e.chaseBoost || 0) + 0.02, 0.4);
+        // Mientras persigue no se ata al homeX → puede recorrer la cueva.
+        e.homeX = e.x;
+        // Salto de persecución: salta para subir a plataformas o cruzar tras el jugador.
+        e.hopT = (e.hopT || 0) - 1;
+        const playerAbove = dyP < -0.6 * TILE;
+        if(e.onGround && e.hopT <= 0 && (playerAbove || Math.random() < 0.045)){
+          e.vy = JUMP_V * (playerAbove ? 0.82 : 0.6);
+          e.hopT = 42 + (Math.random()*28|0);
+        }
       } else {
         e.chaseBoost = Math.max((e.chaseBoost || 0) - 0.03, 0);
       }
@@ -6479,6 +6596,95 @@ function renderBGSub(c){
 }
 // Capa parallax dinámica encima del bg cacheado
 function drawParallax(){
+  // ═══ CAPA EXTRA DEL MUNDO 3 (FRENÉTICO) ═══
+  // Se dibuja DETRÁS del parallax propio del nivel. Cada elemento aparece/intensifica
+  // según el número de nivel, así el mundo se ve cada vez más desarrollado hacia 3-5.
+  if(worldNum === 3 && !inSubLevel){
+    const L = level;                       // 1..5
+    // 1) ISLAS FLOTANTES DE CRISTAL lejanas (desde 3-1, más cantidad por nivel)
+    const isleN = 3 + L;                    // 4 .. 8
+    for(let i=0;i<isleN;i++){
+      const cx = i * 260 + 60;
+      const px = ((cx - cam.x*0.12) % (CW+520) + CW+520) % (CW+520) - 260;
+      const py = 40 + ((i*53) % 90) + Math.sin(fc*0.01 + i)*4;
+      const w = 34 + (i%3)*14;
+      // base rocosa
+      ctx.fillStyle = 'rgba(30,60,70,0.55)';
+      ctx.beginPath();
+      ctx.moveTo(px - w/2, py);
+      ctx.lineTo(px + w/2, py);
+      ctx.lineTo(px, py + 16 + (i%3)*6);
+      ctx.closePath();
+      ctx.fill();
+      // hierba/cristal arriba
+      ctx.fillStyle = 'rgba(80,200,170,0.45)';
+      ctx.fillRect(px - w/2, py - 3, w, 4);
+      // cristal flotante brillante
+      ctx.fillStyle = `rgba(120,255,220,${0.25 + L*0.05})`;
+      ctx.beginPath();
+      ctx.moveTo(px, py - 14);
+      ctx.lineTo(px + 4, py - 4);
+      ctx.lineTo(px, py + 2);
+      ctx.lineTo(px - 4, py - 4);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // 2) CIUDADELA/SPIRES en el horizonte (desde 3-2 en adelante)
+    if(L >= 2){
+      const baseY = CH - CH*0.34;
+      for(let i=0;i<8;i++){
+        const cx = i*200;
+        const px = ((cx - cam.x*0.22) % (CW+360) + CW+360) % (CW+360) - 180;
+        const h = 50 + (i%4)*22 + L*6;
+        ctx.fillStyle = `rgba(24,46,60,${0.5 + L*0.05})`;
+        ctx.fillRect(px, baseY - h, 16, h);
+        // aguja superior
+        ctx.beginPath();
+        ctx.moveTo(px - 2, baseY - h);
+        ctx.lineTo(px + 8, baseY - h - 14);
+        ctx.lineTo(px + 18, baseY - h);
+        ctx.fill();
+        // ventanitas luminosas (más por nivel)
+        ctx.fillStyle = `rgba(120,255,220,${0.4 + L*0.08})`;
+        for(let v=0; v<L; v++){
+          ctx.fillRect(px + 5, baseY - h + 8 + v*9, 2, 3);
+          ctx.fillRect(px + 10, baseY - h + 12 + v*9, 2, 3);
+        }
+      }
+    }
+    // 3) RIBBONS DE AURORA ondulantes (desde 3-3, intensifican)
+    if(L >= 3){
+      for(let r=0;r<L-1;r++){
+        ctx.fillStyle = `rgba(${80+r*20}, 255, ${200-r*20}, ${0.05 + (L-2)*0.02})`;
+        ctx.beginPath();
+        const yb = 30 + r*26;
+        for(let xx=0; xx<=CW; xx+=12){
+          const yy = yb + Math.sin(xx*0.02 + fc*0.02 + r)*10;
+          if(xx===0) ctx.moveTo(xx, yy); else ctx.lineTo(xx, yy);
+        }
+        for(let xx=CW; xx>=0; xx-=12){
+          const yy = yb + 8 + Math.sin(xx*0.02 + fc*0.02 + r)*10;
+          ctx.lineTo(xx, yy);
+        }
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+    // 4) PARTÍCULAS DE ENERGÍA flotando (desde 3-4, denso en 3-5)
+    if(L >= 4){
+      const pN = (L === 5) ? 40 : 22;
+      for(let i=0;i<pN;i++){
+        const baseX = (i*87 + 30) % (CW+100);
+        const px = ((baseX - cam.x*0.5) % (CW+100) + CW+100) % (CW+100) - 50;
+        const py = 30 + ((i*53 + fc*0.5) % (CH-120));
+        const fl = 0.5 + 0.5*Math.sin(fc*0.08 + i*1.3);
+        ctx.fillStyle = `rgba(140,255,220,${0.4*fl})`;
+        ctx.beginPath(); ctx.arc(px, py, 1.4, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = `rgba(140,255,220,${0.12*fl})`;
+        ctx.beginPath(); ctx.arc(px, py, 4, 0, Math.PI*2); ctx.fill();
+      }
+    }
+  }
   if(level===1){
     // Nubes
     ctx.fillStyle = 'rgba(255,255,255,0.92)';
@@ -9490,18 +9696,25 @@ function render(){
     ctx.fillStyle = grd;
     ctx.fillRect(0, 0, CW, CH);
   } else if(worldNum === 3 && !inSubLevel){
-    // Mundo FRENÉTICO: tinte verde-azul fantasmal con flicker
-    const flick = 0.25 + Math.sin(fc*0.04)*0.05;
-    ctx.fillStyle = `rgba(40, 80, 100, ${flick})`;
+    // Mundo FRENÉTICO: atmósfera etérea SIN rayado. El tinte sube de sutil (3-1)
+    // a más presente (3-5) para que se sienta cada vez más épico hacia el final.
+    const lvlBoost = (level - 1) / 4;                 // 0 en 3-1 → 1 en 3-5
+    const tint = 0.05 + lvlBoost * 0.10;              // 0.05 → 0.15
+    // Velo cian-teal muy suave (sin flicker brusco)
+    ctx.fillStyle = `rgba(40, 120, 140, ${tint})`;
     ctx.fillRect(0, 0, CW, CH);
-    // Tinte cian sutil
-    ctx.fillStyle = 'rgba(0, 200, 220, 0.06)';
+    // Aurora superior: un degradé que cae desde arriba, más fuerte por nivel
+    const aur = ctx.createLinearGradient(0, 0, 0, CH);
+    aur.addColorStop(0, `rgba(80, 255, 210, ${0.06 + lvlBoost*0.12})`);
+    aur.addColorStop(0.45, 'rgba(80, 255, 210, 0)');
+    ctx.fillStyle = aur;
+    ctx.fillRect(0, 0, CW, CH*0.6);
+    // Viñeta sutil en los bordes para dar profundidad
+    const vig = ctx.createRadialGradient(CW/2, CH*0.45, CH*0.25, CW/2, CH*0.45, CH*0.9);
+    vig.addColorStop(0, 'rgba(0,0,0,0)');
+    vig.addColorStop(1, `rgba(4, 18, 26, ${0.25 + lvlBoost*0.2})`);
+    ctx.fillStyle = vig;
     ctx.fillRect(0, 0, CW, CH);
-    // Líneas de scan horizontales (efecto retro)
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.08)';
-    for(let yy=0; yy<CH; yy+=3){
-      ctx.fillRect(0, yy, CW, 1);
-    }
   }
 
   // tiles (only those visible)
@@ -9548,39 +9761,96 @@ function render(){
   }
   drawBossProjectiles();
 
-  // Portal de salida del subnivel 4 (cueva atajo)
+  // Portal de salida del subnivel 4 (cueva atajo) — arco de piedra + vórtice giratorio
   if(inSubLevel && window._cave4ExitX != null){
     const px = window._cave4ExitX - cam.x;
     const py = window._cave4ExitY;
-    if(px > -40 && px < CW + 40){
-      const pulse = 0.5 + Math.sin(fc*0.15)*0.5;
-      // Halo amplio
-      ctx.fillStyle = `rgba(160,255,140,${0.18 + pulse*0.18})`;
-      ctx.beginPath();
-      ctx.arc(px, py - 20, 28, 0, Math.PI*2);
-      ctx.fill();
-      // Cuerpo del portal (óvalo vertical)
-      ctx.fillStyle = `rgba(80,220,120,${0.55 + pulse*0.3})`;
-      ctx.beginPath();
-      ctx.ellipse(px, py - 20, 12, 22, 0, 0, Math.PI*2);
-      ctx.fill();
+    if(px > -50 && px < CW + 50){
+      const cy = py - 22;
+      const pulse = 0.5 + Math.sin(fc*0.12)*0.5;
+      ctx.save();
+      // Halo exterior
+      ctx.fillStyle = `rgba(120,255,170,${0.10 + pulse*0.10})`;
+      ctx.beginPath(); ctx.arc(px, cy, 30, 0, Math.PI*2); ctx.fill();
+      // Marco de piedra (arco redondeado)
+      ctx.fillStyle = '#4a4036';
+      ctx.beginPath(); ctx.ellipse(px, cy, 17, 25, 0, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#6a5c4c';
+      ctx.beginPath(); ctx.ellipse(px, cy, 14.5, 22, 0, 0, Math.PI*2); ctx.fill();
+      // Piedritas del arco
+      ctx.fillStyle = '#352e26';
+      for(let i=0;i<10;i++){
+        const a = (i/10)*Math.PI*2;
+        ctx.fillRect(px + Math.cos(a)*14.5 - 1.5, cy + Math.sin(a)*22 - 1.5, 3, 3);
+      }
+      // Vórtice giratorio interno (espirales translúcidas)
+      ctx.fillStyle = `rgba(40,120,90,0.9)`;
+      ctx.beginPath(); ctx.ellipse(px, cy, 12, 19, 0, 0, Math.PI*2); ctx.fill();
+      for(let s=0;s<3;s++){
+        const rot = fc*0.06 + s*(Math.PI*2/3);
+        ctx.strokeStyle = `rgba(150,255,200,${0.4 + pulse*0.3})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for(let t=0;t<1;t+=0.1){
+          const rr = t*11;
+          const aa = rot + t*5;
+          const sx = px + Math.cos(aa)*rr*0.6;
+          const sy = cy + Math.sin(aa)*rr;
+          if(t===0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
+        }
+        ctx.stroke();
+      }
       // Núcleo brillante
-      ctx.fillStyle = `rgba(220,255,200,${0.6 + pulse*0.3})`;
-      ctx.beginPath();
-      ctx.ellipse(px, py - 20, 5, 14, 0, 0, Math.PI*2);
-      ctx.fill();
-      // Partículas mágicas que salen
-      if(fc % 4 === 0){
+      ctx.fillStyle = `rgba(220,255,230,${0.55 + pulse*0.35})`;
+      ctx.beginPath(); ctx.ellipse(px, cy, 4, 9, 0, 0, Math.PI*2); ctx.fill();
+      ctx.restore();
+      // Cartelito "SALIDA ↓" cuando el jugador está cerca
+      if(Math.abs(P.x - window._cave4ExitX) < 3*TILE){
+        ctx.fillStyle = '#a0ffc0';
+        ctx.font = 'bold 9px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('SALIDA ↓', px, cy - 30 + Math.sin(fc*0.12)*2);
+        ctx.textAlign = 'left';
+      }
+      // Partículas que emanan
+      if(fc % 5 === 0){
         const ang = Math.random() * Math.PI*2;
         parts.push({
-          x: px + Math.cos(ang)*10,
-          y: py - 20 + Math.sin(ang)*16,
-          vx: Math.cos(ang)*0.6,
-          vy: -1.2 + Math.random()*0.5,
-          col: '#a0f0c0',
-          life: 24, ml: 30, sz: 1.5
+          x: px + Math.cos(ang)*9, y: cy + Math.sin(ang)*15,
+          vx: Math.cos(ang)*0.5, vy: -1.0 + Math.random()*0.4,
+          col: '#a0f0c0', life: 26, ml: 32, sz: 1.5
         });
       }
+    }
+  }
+
+  // Entrada secreta del subnivel 4 (sólo en nivel 4, si no se usó): brillo sutil descubrible
+  if(level === 4 && !inSubLevel && !subLevel4Used && window._cave4EntryX != null){
+    const ex = window._cave4EntryX - cam.x;
+    const ey = window._cave4EntryY;
+    if(ex > -30 && ex < CW + 30){
+      const pulse = 0.5 + Math.sin(fc*0.06)*0.5;
+      ctx.save();
+      // Remolino tenue de energía sobre el suelo (apenas perceptible)
+      ctx.fillStyle = `rgba(120,255,200,${0.06 + pulse*0.08})`;
+      ctx.beginPath(); ctx.ellipse(ex, ey - 3, 13, 4, 0, 0, Math.PI*2); ctx.fill();
+      // Chispitas que suben de a poco
+      if(fc % 14 === 0){
+        parts.push({
+          x: ex + (Math.random()-0.5)*16, y: ey - 2,
+          vx: (Math.random()-0.5)*0.3, vy: -0.7 - Math.random()*0.5,
+          col: '#a0f0c0', life: 34, ml: 40, sz: 1
+        });
+      }
+      // Pista "↓ ?" sólo si el jugador está MUY encima (lo descubrió)
+      if(Math.abs(P.x + P.w/2 - window._cave4EntryX) < TILE && P.onGround){
+        ctx.fillStyle = `rgba(160,255,200,${0.6 + pulse*0.4})`;
+        ctx.font = 'bold 11px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('↓ ?', ex, ey - 14 + Math.sin(fc*0.12)*2);
+        ctx.textAlign = 'left';
+      }
+      ctx.restore();
     }
   }
 
