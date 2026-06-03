@@ -382,9 +382,9 @@ button.action-btn.secondary{
 
   <!-- Selector de dificultad -->
   <div id="diff-select" style="display:flex;justify-content:center;gap:10px;margin:0 0 12px 0;flex-wrap:wrap;">
-    <button class="mode-btn" data-diff="easy" id="diff-easy">🐢 FÁCIL <span style="font-size:10px;opacity:.7;font-weight:600;">¼ veloc.</span></button>
+    <button class="mode-btn" data-diff="easy" id="diff-easy">🐢 FÁCIL</button>
     <button class="mode-btn selected" data-diff="normal" id="diff-normal">🐶 NORMAL</button>
-    <button class="mode-btn" data-diff="hard" id="diff-hard">🔥 DIFÍCIL <span style="font-size:10px;opacity:.7;font-weight:600;">+10%</span></button>
+    <button class="mode-btn" data-diff="hard" id="diff-hard">🔥 DIFÍCIL</button>
   </div>
 
   <h2 id="char-title">Elegí tu héroe</h2>
@@ -1575,7 +1575,7 @@ const SCORES_MAX = 50;             // máximo de entradas guardadas
 
 // Si se configura una URL de backend remoto (Vercel KV o similar),
 // los scores se enviarán también ahí. Dejarlo en null para usar solo local.
-const SCORES_REMOTE_URL = null;    // ej: '/api/scores'
+const SCORES_REMOTE_URL = '/api/scores';   // función serverless en api/scores.js
 
 function getScores(){
   if(typeof localStorage === 'undefined') return [];
@@ -1615,6 +1615,53 @@ function addScore(entry){
       }).catch(()=>{});
     } catch(e){}
   }
+}
+
+// Bandera emoji a partir del código de país (ej. "AR" → 🇦🇷)
+function flagEmoji(cc){
+  if(!cc || cc.length !== 2) return '🌐';
+  cc = cc.toUpperCase();
+  const a = cc.charCodeAt(0) - 65, b = cc.charCodeAt(1) - 65;
+  if(a < 0 || a > 25 || b < 0 || b > 25) return '🌐';
+  return String.fromCodePoint(0x1F1E6 + a, 0x1F1E6 + b);
+}
+
+// Filas del ranking GLOBAL (incluye país/ciudad)
+function scoreRowsHtmlGlobal(scores){
+  if(!scores || scores.length === 0){
+    return '<p class="msg-sub" style="color:#888">Todavía no hay partidas en el ranking global.</p>';
+  }
+  return `
+    <div style="max-height:280px;overflow-y:auto;margin:12px 0;border:1px solid rgba(255,255,255,0.1);border-radius:6px;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead style="position:sticky;top:0;background:rgba(60,40,80,0.95);color:#ffd34d;">
+          <tr>
+            <th style="padding:8px 6px;text-align:left;">#</th>
+            <th style="padding:8px 6px;text-align:left;">Jugador</th>
+            <th style="padding:8px 6px;text-align:left;">País</th>
+            <th style="padding:8px 6px;text-align:right;">🦴</th>
+            <th style="padding:8px 6px;text-align:center;">Final</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${scores.map((s, i) => {
+            const charName = s.char === 'doverman' ? 'Doberman' : 'Wiener';
+            const result = s.result === 'won'
+              ? '<span style="color:#88e088">✓ Ganó</span>'
+              : '<span style="color:#ff8080">✗ ' + (s.world||1) + '-' + (s.level||1) + '</span>';
+            const rowStyle = i < 3 ? 'background:rgba(255,210,80,' + (0.15 - i*0.04) + ');' : '';
+            const loc = escapeHtml(s.city ? s.city : (s.country || ''));
+            return `<tr style="${rowStyle}border-bottom:1px solid rgba(255,255,255,0.05);">
+              <td style="padding:6px 6px;color:${i===0?'#ffd34d':i===1?'#c0c0c0':i===2?'#cd7f32':'#aaa'};font-weight:700;">${i+1}</td>
+              <td style="padding:6px 6px;">${escapeHtml(s.name||'Anónimo')} <span style="color:#888;font-size:11px">(${charName})</span></td>
+              <td style="padding:6px 6px;">${flagEmoji(s.country)} <span style="color:#a0c0ff;font-size:11px">${loc}</span></td>
+              <td style="padding:6px 6px;text-align:right;color:#ffd34d;font-weight:700;">${s.bones||0}</td>
+              <td style="padding:6px 6px;text-align:center;font-size:11px;">${result}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
 }
 
 // Pantalla del leaderboard
@@ -1660,8 +1707,8 @@ function showScoreboard(){
   msg.innerHTML = `
     <div class="msg-card msg-card-win">
       <h2 class="msg-title">🏆 PUNTAJES</h2>
-      <p class="msg-sub">Mejores partidas guardadas en este dispositivo</p>
-      ${rowsHtml}
+      <p class="msg-sub">Ranking global</p>
+      <div id="sb-body">${rowsHtml}</div>
       <div style="display:flex;gap:10px;justify-content:center;margin-top:14px;">
         <button class="action-btn" id="msg-btn">VOLVER</button>
         ${scores.length > 0 ? '<button class="action-btn" id="msg-btn-clear" style="background:linear-gradient(180deg,#d04040,#902020);">BORRAR HISTORIAL</button>' : ''}
@@ -1678,11 +1725,24 @@ function showScoreboard(){
   const clearBtn = document.getElementById('msg-btn-clear');
   if(clearBtn){
     clearBtn.onclick = () => {
-      if(confirm('¿Borrar todo el historial de puntajes? Esta acción no se puede deshacer.')){
+      if(confirm('¿Borrar el historial local de este dispositivo?')){
         try { localStorage.removeItem(SCORES_KEY); } catch(e){}
         showScoreboard();
       }
     };
+  }
+
+  // Traer el ranking GLOBAL desde el backend y reemplazar la tabla.
+  // Si falla, queda la tabla local que ya se mostró como respaldo.
+  if(SCORES_REMOTE_URL){
+    fetch(SCORES_REMOTE_URL, { method: 'GET' })
+      .then(r => r.ok ? r.json() : Promise.reject(new Error('http')))
+      .then(data => {
+        const arr = Array.isArray(data) ? data : ((data && data.scores) || []);
+        const body = document.getElementById('sb-body');
+        if(body) body.innerHTML = scoreRowsHtmlGlobal(arr);
+      })
+      .catch(() => { /* sin conexión: se mantiene la tabla local */ });
   }
 }
 
