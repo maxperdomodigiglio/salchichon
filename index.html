@@ -3716,7 +3716,7 @@ function updateEnemies(){
     // Vuela horizontal con oscilación vertical (zigzag). NO tiene gravedad.
     // Sí se puede matar saltándole encima.
     if(e.type === 'fly'){
-      // ═══ GORRIÓN: IA de NPC — vuelo libre + posarse + asustarse del jugador ═══
+      // ═══ GORRIÓN: IA de NPC — SIEMPRE volando, esquiva bloques y al jugador ═══
       if(e.kind === 'sparrow'){
         e.ft++;
         if(e.ft > 6){ e.ft = 0; e.fr ^= 1; }   // aleteo rápido
@@ -3725,101 +3725,63 @@ function updateEnemies(){
         const maxXlvl = (window._flagX || 220*TILE) - 3*TILE;
         const minY = TILE, maxYair = 9*TILE;
 
-        // ── POSADO: descansa sobre algo y despega solo (o si lo asustás) ──
-        if(e.perched){
-          e.y = e.perchY; e.vx = 0; e.vy = 0;
-          e.restT--;
-          const startled = Math.hypot(P.x - e.x, P.y - e.y) < 3.2*TILE;
-          if(e.restT <= 0 || startled){
-            e.perched = false; e.seekPerch = false; e.retargetT = 0;
-            e.vy = -1.4;
-            e.vx = (startled ? (P.x > e.x ? -1 : 1) : (Math.random()<0.5?-1:1)) * e.maxSpd;
-            if(startled) burst(e.x+e.w/2, e.y+e.h/2, '#caa37a', 7);
-          } else {
-            if(!P.dead && P.inv === 0 && active){
-              const hbp = {x:e.x+2, y:e.y+2, w:e.w-4, h:e.h-4};
-              if(aabb(P, hbp)){
-                if(powerUpT > 0 || (P.vy > 0.4 && P.y + P.h < e.y + e.h*0.6)){
-                  e.dead = true; e.deadT = 0; e.vy = -3; e.vx = 0;
-                  if(P.vy > 0) P.vy = -6.2;
-                  rewardBone(1); sfxHurt();
-                  burst(e.x+e.w/2, e.y+4, '#a06030', 12);
-                  showFloatingText('+1', e.x+e.w/2, e.y, '#ffd34d');
-                } else { P.dead = true; cam.shakeT = 12; sfxHurt(); burst(P.x+P.w/2,P.y+P.h/2,'#ff2020',16); }
-              }
-            }
-            continue;
-          }
-        }
-
-        // ── ELEGIR/REFRESCAR OBJETIVO (a veces decide posarse en algo real) ──
+        // ── ELEGIR/REFRESCAR OBJETIVO DE VUELO (punto aéreo que NO esté dentro de un bloque) ──
         e.retargetT = (e.retargetT || 0) - 1;
-        const reached = Math.hypot((e.wanderTX||e.x) - e.x, (e.wanderTY||e.y) - e.y) < TILE*1.2;
+        const reached = Math.hypot((e.wanderTX||e.x) - e.x, (e.wanderTY||e.y) - e.y) < TILE*1.5;
         if(e.retargetT <= 0 || reached){
-          if(!e.seekPerch && Math.random() < 0.30){
-            // buscar tile sólido con el tope libre, cerca, para posarse
-            let best = null, bestD = 1e9;
-            for(const t of tiles){
-              if(!SOLID.has(t.t)) continue;
-              if(t.y < 3*TILE || t.y > 11*TILE) continue;
-              let blocked = false;
-              for(const o of tiles){ if(SOLID.has(o.t) && o.x === t.x && o.y === t.y - TILE){ blocked = true; break; } }
-              if(blocked) continue;
-              const d = Math.abs(t.x - e.x);
-              if(d > 2*TILE && d < 22*TILE && d < bestD){ bestD = d; best = t; }
-            }
-            if(best){
-              e.seekPerch = true;
-              e.perchTileTop = best.y;
-              e.wanderTX = best.x + 1;
-              e.wanderTY = best.y - e.h - 2;
-              e.retargetT = 600;
-            }
-          }
-          if(!e.seekPerch){
-            // objetivo aéreo libre, sin posiciones prefijadas
-            e.wanderTX = minX + Math.random() * (maxXlvl - minX);
-            e.wanderTY = minY + Math.random() * (maxYair - minY);
-            e.retargetT = 70 + (Math.random()*90|0);
-          }
+          let tx = e.x, ty = e.y, tries = 0;
+          do {
+            tx = minX + Math.random() * (maxXlvl - minX);
+            ty = minY + Math.random() * (maxYair - minY);
+            tries++;
+            // rechazar objetivos que caen dentro de un tile sólido
+            var insideSolid = false;
+            const probe = {x: tx-2, y: ty-2, w: e.w+4, h: e.h+4};
+            for(const t of tiles){ if(SOLID.has(t.t) && aabb(probe, t)){ insideSolid = true; break; } }
+          } while(insideSolid && tries < 6);
+          e.wanderTX = tx; e.wanderTY = ty;
+          e.retargetT = 60 + (Math.random()*80|0);
         }
 
-        // ── ASUSTARSE: si el jugador se acerca, vuela en sentido opuesto ──
+        // ── ASUSTARSE: si el jugador se acerca, el objetivo pasa a ser huir ──
         let tgX = e.wanderTX, tgY = e.wanderTY;
         const dxP = e.x - P.x, dyP = e.y - P.y;
-        if(Math.hypot(dxP, dyP) < 3.5*TILE){
+        if(Math.hypot(dxP, dyP) < 3.8*TILE){
           const a = Math.atan2(dyP, dxP);
-          tgX = e.x + Math.cos(a) * 6*TILE;
+          tgX = e.x + Math.cos(a) * 7*TILE;
           tgY = e.y + Math.sin(a) * 4*TILE - TILE;
-          e.seekPerch = false;
+          e.retargetT = Math.min(e.retargetT, 8);   // re-evaluar pronto al escapar
         }
 
-        // ── STEERING suave hacia el objetivo (nada de teletransportes) ──
+        // ── STEERING suave hacia el objetivo ──
         const ang = Math.atan2(tgY - e.y, tgX - e.x);
-        e.vx += (Math.cos(ang) * e.maxSpd - e.vx) * 0.10;
-        e.vy += (Math.sin(ang) * e.maxSpd - e.vy) * 0.10;
-        e.vy += Math.sin(e.breathT) * 0.06;   // bobeo natural sutil
+        e.vx += (Math.cos(ang) * e.maxSpd - e.vx) * 0.09;
+        e.vy += (Math.sin(ang) * e.maxSpd - e.vy) * 0.09;
+        e.vy += Math.sin(e.breathT) * 0.05;   // bobeo natural sutil
+        // clamp de velocidad
         const sp = Math.hypot(e.vx, e.vy);
         if(sp > e.maxSpd){ e.vx = e.vx/sp*e.maxSpd; e.vy = e.vy/sp*e.maxSpd; }
-        e.x += e.vx; e.y += e.vy;
+
+        // ── MOVIMIENTO con evasión de bloques (eje por eje: rebota, nunca se incrusta) ──
+        const nx = e.x + e.vx;
+        let hitX = false;
+        const boxX = {x: nx, y: e.y, w: e.w, h: e.h};
+        for(const t of tiles){ if(SOLID.has(t.t) && aabb(boxX, t)){ hitX = true; break; } }
+        if(hitX){ e.vx = -e.vx * 0.6; e.retargetT = 0; } else { e.x = nx; }
+        const ny = e.y + e.vy;
+        let hitY = false;
+        const boxY = {x: e.x, y: ny, w: e.w, h: e.h};
+        for(const t of tiles){ if(SOLID.has(t.t) && aabb(boxY, t)){ hitY = true; break; } }
+        if(hitY){ e.vy = -e.vy * 0.6; e.retargetT = 0; } else { e.y = ny; }
+
+        // ── Límites del aire del nivel ──
         if(e.x < minX){ e.x = minX; e.vx = Math.abs(e.vx); }
         if(e.x > maxXlvl){ e.x = maxXlvl; e.vx = -Math.abs(e.vx); }
         if(e.y < minY){ e.y = minY; e.vy = Math.abs(e.vy)*0.5; }
         if(e.y > maxYair){ e.y = maxYair; e.vy = -Math.abs(e.vy)*0.5; }
         e.dir = e.vx >= 0 ? 1 : -1;
 
-        // ── POSARSE al llegar al punto sobre el tile elegido ──
-        if(e.seekPerch &&
-           Math.abs(e.x - e.wanderTX) < TILE*0.8 &&
-           Math.abs((e.y + e.h) - e.perchTileTop) < TILE*0.9 && e.vy >= -0.2){
-          e.perched = true;
-          e.perchY = e.perchTileTop - e.h;
-          e.y = e.perchY;
-          e.restT = 90 + (Math.random()*150|0);
-          e.seekPerch = false; e.vx = 0; e.vy = 0;
-        }
-
-        // ── COLISIÓN con jugador en vuelo ──
+        // ── COLISIÓN con jugador ──
         if(!P.dead && P.inv === 0 && active){
           const hb = {x:e.x+2, y:e.y+2, w:e.w-4, h:e.h-4};
           if(aabb(P, hb)){
@@ -9804,14 +9766,6 @@ function render(){
       ctx.fillStyle = `rgba(220,255,230,${0.55 + pulse*0.35})`;
       ctx.beginPath(); ctx.ellipse(px, cy, 4, 9, 0, 0, Math.PI*2); ctx.fill();
       ctx.restore();
-      // Cartelito "SALIDA ↓" cuando el jugador está cerca
-      if(Math.abs(P.x - window._cave4ExitX) < 3*TILE){
-        ctx.fillStyle = '#a0ffc0';
-        ctx.font = 'bold 9px system-ui, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('SALIDA ↓', px, cy - 30 + Math.sin(fc*0.12)*2);
-        ctx.textAlign = 'left';
-      }
       // Partículas que emanan
       if(fc % 5 === 0){
         const ang = Math.random() * Math.PI*2;
@@ -9821,36 +9775,6 @@ function render(){
           col: '#a0f0c0', life: 26, ml: 32, sz: 1.5
         });
       }
-    }
-  }
-
-  // Entrada secreta del subnivel 4 (sólo en nivel 4, si no se usó): brillo sutil descubrible
-  if(level === 4 && !inSubLevel && !subLevel4Used && window._cave4EntryX != null){
-    const ex = window._cave4EntryX - cam.x;
-    const ey = window._cave4EntryY;
-    if(ex > -30 && ex < CW + 30){
-      const pulse = 0.5 + Math.sin(fc*0.06)*0.5;
-      ctx.save();
-      // Remolino tenue de energía sobre el suelo (apenas perceptible)
-      ctx.fillStyle = `rgba(120,255,200,${0.06 + pulse*0.08})`;
-      ctx.beginPath(); ctx.ellipse(ex, ey - 3, 13, 4, 0, 0, Math.PI*2); ctx.fill();
-      // Chispitas que suben de a poco
-      if(fc % 14 === 0){
-        parts.push({
-          x: ex + (Math.random()-0.5)*16, y: ey - 2,
-          vx: (Math.random()-0.5)*0.3, vy: -0.7 - Math.random()*0.5,
-          col: '#a0f0c0', life: 34, ml: 40, sz: 1
-        });
-      }
-      // Pista "↓ ?" sólo si el jugador está MUY encima (lo descubrió)
-      if(Math.abs(P.x + P.w/2 - window._cave4EntryX) < TILE && P.onGround){
-        ctx.fillStyle = `rgba(160,255,200,${0.6 + pulse*0.4})`;
-        ctx.font = 'bold 11px system-ui, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('↓ ?', ex, ey - 14 + Math.sin(fc*0.12)*2);
-        ctx.textAlign = 'left';
-      }
-      ctx.restore();
     }
   }
 
