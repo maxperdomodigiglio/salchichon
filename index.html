@@ -674,6 +674,17 @@ let collectedBoneKeys = {};         // huesitos ya recogidos (no reaparecen tras
 let hitBlockKeys = {};              // bloques '?' ya abiertos (no se vuelven a abrir tras morir)
 const LEVEL_TIME_FRAMES = 150 * 60; // 2:30 por nivel (a 60fps)
 
+// Ajuste de PUNTAJE por dificultad (se aplica al score del ranking):
+//   fácil  → vale 50%
+//   normal → 100%
+//   difícil → +2 por cada 10 (o sea +20%)
+function scoreFor(raw){
+  raw = Math.max(0, Math.floor(raw || 0));
+  if(difficultyKey === 'easy') return Math.floor(raw * 0.5);
+  if(difficultyKey === 'hard') return raw + Math.floor(raw / 10) * 2;
+  return raw;
+}
+
 // Tiles que el jugador y enemigos consideran sólidos
 const SOLID = new Set(['gnd','brk','qb','qbLife','ptop','pbod','ftop','fbod','sld','stone','dngnd','fall','ice','grassIsle','bridge']);
 
@@ -1772,7 +1783,7 @@ function recordRun(result){
         char: p.char,
         world: p.worldNum,
         level: p.level,
-        bones: p.totalBonesEarned,
+        bones: scoreFor(p.totalBonesEarned),
         result: result === 'won' ? (p.completed ? 'won' : 'lost') : 'lost'
       });
     }
@@ -1785,7 +1796,7 @@ function recordRun(result){
       char: chosenChar,
       world: worldNum,
       level: level,
-      bones: totalBonesEarned,
+      bones: scoreFor(totalBonesEarned),
       result: result
     });
   }
@@ -3331,23 +3342,25 @@ function buildLevel5(){
   for(let x=139; x<=141; x++) T(x, 9, 'sld');
   for(let x=167; x<=169; x++) T(x, 8, 'sld');
 
-  // Bandera al final (isla 180-188)
-  for(let s=0; s<6; s++){
-    for(let r=0; r<=s; r++) T(181+s, 10-r, 'sld');
-  }
+  // Bandera al final (isla 180-188) — terreno plano + PÓDIUM de la reina
+  // Pódium de 1 tile de alto donde se para la reina (ya no flota en el aire)
+  for(let x=183; x<=185; x++) T(x, 10, 'sld');
   for(let r=0; r<12; r++){
     tiles.push({x:187*TILE, y:r*TILE, w:4, h:TILE, t:'pole', hit:false});
   }
-  window._flagX = 187*TILE;
+  // El rescate se dispara al llegar a la reina (apenas pasás la puerta del jefe en x=181).
+  // El mástil en 187 queda de fondo épico detrás del trono.
+  window._flagX = 182*TILE;
 
   // ── PRINCESA — varía por mundo ──
   //   Mundo 1: Lulu (Bichón Maltés)
   //   Mundo 2: Turna (Bulldog Francés)
   //   Mundo 3: Bamby (Salchicha entrada en años, reina madre)
   window._princess = {
-    x: 184*TILE, y: 10*TILE - 16,
+    x: 184*TILE - 2, y: 10*TILE - 18,   // parada SOBRE el pódium (fila 10)
     w: 28, h: 18,
-    bobT: 0, blinkT: 0, rescued: false,
+    bobT: 0, blinkT: 0, rescued: false, grounded: true, throne: true,
+    cheer: 0,
     variant: worldNum === 1 ? 'lulu' : (worldNum === 2 ? 'turna' : 'bamby')
   };
 
@@ -6418,23 +6431,109 @@ function checkFlag(){
     // level === 5: fin del mundo actual
     if(worldNum < 3){
       const finishedWorld = worldNum;
-      showWorldComplete(finishedWorld, ()=>{
-        worldNum = finishedWorld + 1;
-        subLevelUsed = false;
-        subLevel4Used = false;
-        inSubLevel = false;
-        savedMainState = null;
-        loopGo = true;
-        initLevel(1);
-        requestAnimationFrame(loop);
+      startWorldCutscene(finishedWorld, ()=>{
+        showWorldComplete(finishedWorld, ()=>{
+          worldNum = finishedWorld + 1;
+          subLevelUsed = false;
+          subLevel4Used = false;
+          inSubLevel = false;
+          savedMainState = null;
+          loopGo = true;
+          initLevel(1);
+          requestAnimationFrame(loop);
+        });
       });
     } else {
       // Mundo 3 - nivel 5 → rescate de Bamby + VICTORIA FINAL
-      setTimeout(()=>{
-        showWorldComplete(3, ()=>{
-          showFinalVictory();
-        });
-      }, 400);
+      startWorldCutscene(3, ()=>{
+        showWorldComplete(3, ()=>{ showFinalVictory(); });
+      });
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  CUTSCENE DE FIN DE MUNDO — el salchicha (NPC) corre hasta la reina
+//  rescatada, estallan fuegos artificiales y hace un bailecito de perrito.
+//  Maneja todo fuera del step() normal (que queda congelado).
+// ═══════════════════════════════════════════════════════════════
+let cutscene = null;
+
+function fireworkBurst(wx, wy){
+  const cols = ['#ff5050','#ffd34d','#52e0a0','#52b0e8','#ff80c0','#ffffff'];
+  for(let i=0;i<3;i++){
+    const c = cols[(Math.random()*cols.length)|0];
+    burst(wx + (Math.random()-0.5)*12, wy + (Math.random()-0.5)*12, c, 16, 1.7);
+  }
+}
+
+function startWorldCutscene(world, onDone){
+  const pr = window._princess;
+  won = true;
+  levelTransitioning = true;   // congela el juego; la cutscene maneja P y las partículas
+  P.dead = false; P.inv = 0; P.jumping = false; P.vx = 0; P.vy = 0;
+  cutscene = {
+    phase: 'walk', t: 0, world: world, onDone: onDone,
+    targetX: pr ? (pr.x - P.w - 3) : P.x,   // pararse a la izquierda de la reina
+    groundY: P.y
+  };
+}
+
+function updateCutscene(){
+  const cs = cutscene;
+  if(!cs) return;
+  cs.t++;
+  const pr = window._princess;
+
+  // Cámara centrada en la reina
+  const focus = pr ? pr.x : P.x;
+  const targetCam = Math.max(0, focus - CW/2 + 16);
+  cam.x += (targetCam - cam.x) * 0.08;
+
+  // El step normal está frenado: animamos las partículas y el shake acá
+  updateParts();
+  if(cam.shakeT > 0){ cam.shakeT *= 0.86; if(cam.shakeT < 0.1) cam.shakeT = 0; }
+
+  if(cs.phase === 'walk'){
+    const dx = cs.targetX - P.x;
+    P.dir = dx >= 0 ? 1 : -1;
+    if(Math.abs(dx) > 1.8){
+      P.x += P.dir * 1.7;
+      P.wt = (P.wt||0) + 1; if(P.wt > 5){ P.wt = 0; P.wf = (P.wf||0) + 1; }
+    } else {
+      cs.groundY = P.y;
+      P.dir = (pr && pr.x > P.x) ? 1 : -1;
+      cs.phase = 'celebrate'; cs.t = 0;
+      cam.shakeT = 16;
+      if(pr) pr.cheer = 70;
+      fireworkBurst(pr ? pr.x : P.x, (pr ? pr.y : P.y) - 12);
+      sfxOneUp();
+    }
+  } else if(cs.phase === 'celebrate'){
+    if(cs.t % 16 === 0 && cs.t <= 64){
+      fireworkBurst((pr?pr.x:P.x) + (Math.random()-0.5)*130, (pr?pr.y:P.y) - 24 - Math.random()*34);
+      sfxTone(700 + Math.random()*400, 0.09, {type:'square', vol:0.24});
+    }
+    if(cs.t > 72){ cs.phase = 'dance'; cs.t = 0; }
+  } else if(cs.phase === 'dance'){
+    // ¡Bailecito de perrito! saltitos + meneo + chispitas
+    const hop = Math.abs(Math.sin(cs.t * 0.26));
+    P.y = cs.groundY - hop * 11;
+    P.jumping = hop > 0.5;
+    if(cs.t % 16 === 0) P.dir *= -1;   // meneo
+    if(cs.t % 10 === 0){
+      parts.push({
+        x: P.x + P.w/2 + (Math.random()-0.5)*22, y: P.y - 4,
+        vx: (Math.random()-0.5)*1.4, vy: -1.2 - Math.random(),
+        col: Math.random() > 0.5 ? '#ff80a0' : '#ffd34d', life: 36, ml: 42, sz: 2
+      });
+    }
+    if(pr && pr.cheer <= 0) pr.cheer = 40;   // la reina sigue saltando de alegría
+    if(cs.t > 150){
+      P.y = cs.groundY; P.jumping = false;
+      const done = cs.onDone;
+      cutscene = null;
+      if(done) done();
     }
   }
 }
@@ -9627,7 +9726,8 @@ function drawPrincess(){
   if(screenX < -40 || screenX > CW + 40) return;
   f.bobT = (f.bobT || 0) + 0.06;
   f.blinkT = (f.blinkT || 0) + 1;
-  const bob = Math.sin(f.bobT) * 1.5;
+  let bob = (f.grounded ? Math.sin(f.bobT) * 0.6 : Math.sin(f.bobT) * 1.5);
+  if(f.cheer > 0){ bob -= Math.abs(Math.sin(f.cheer * 0.35)) * 7; f.cheer--; }  // saltitos de festejo
   const x = screenX, y = f.y + bob;
 
   // Aura rosa común
@@ -9645,6 +9745,24 @@ function drawPrincess(){
   ctx.beginPath();
   ctx.ellipse(x+f.w/2, y+f.h+2, f.w/2, 2.5, 0, 0, Math.PI*2);
   ctx.fill();
+
+  // ── TRONO dorado detrás de la reina (rescate épico) ──
+  if(f.throne){
+    const tcx = screenX + f.w/2;
+    ctx.fillStyle = '#6b4410';
+    ctx.fillRect(tcx-15, f.y+f.h-2, 30, 6);        // base
+    ctx.fillStyle = '#d9a72a';
+    ctx.fillRect(tcx-15, f.y-20, 6, f.h+20);       // brazo izq
+    ctx.fillRect(tcx+9,  f.y-20, 6, f.h+20);       // brazo der
+    ctx.fillRect(tcx-15, f.y-26, 30, 10);          // respaldo
+    ctx.fillStyle = '#f0c850';
+    ctx.fillRect(tcx-15, f.y-26, 30, 3);           // brillo del respaldo
+    ctx.fillStyle = '#e0405a';                     // joya central
+    ctx.beginPath(); ctx.arc(tcx, f.y-28, 2.6, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#52b0e8';                     // joyas laterales
+    ctx.beginPath(); ctx.arc(tcx-10, f.y-23, 1.6, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(tcx+10, f.y-23, 1.6, 0, Math.PI*2); ctx.fill();
+  }
 
   // Dispatch por variante
   if(f.variant === 'turna'){
@@ -10420,6 +10538,23 @@ function render(){
   // intro overlay (no shake)
   drawLevelIntro();
 
+  // Cartel épico durante la cutscene de rescate
+  if(cutscene){
+    const pr = window._princess;
+    const name = pr ? (pr.variant === 'turna' ? 'TURNA' : pr.variant === 'bamby' ? 'REINA BAMBY' : 'LULU') : 'LA REINA';
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.shadowColor = '#000'; ctx.shadowBlur = 8;
+    ctx.fillStyle = '#ffd34d';
+    ctx.font = 'bold 26px system-ui, sans-serif';
+    ctx.fillText('¡' + name + ' RESCATADA!', CW/2, 54);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 13px system-ui, sans-serif';
+    ctx.fillText('★ MUNDO ' + cutscene.world + ' COMPLETO ★', CW/2, 76);
+    ctx.restore();
+  }
+
   // shoot button (UI - no cam)
   drawShootButton();
 
@@ -10534,6 +10669,9 @@ function loop(ts){
     // En pausa, no acumulamos tiempo.
     acc = 0;
   }
+
+  // La cutscene de fin de mundo corre aunque el juego esté "en transición".
+  if(cutscene && !paused) updateCutscene();
 
   render();
   requestAnimationFrame(loop);
