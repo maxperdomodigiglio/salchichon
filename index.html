@@ -688,11 +688,14 @@ function scoreFor(raw){
 // Tiles que el jugador y enemigos consideran sólidos
 const SOLID = new Set(['gnd','brk','qb','qbLife','ptop','pbod','ftop','fbod','sld','stone','dngnd','fall','ice','grassIsle','bridge']);
 
-// Caché GPU para fondo estático del nivel actual
+// Caché GPU para fondo estático del nivel actual (a resolución real DPR → nítido)
 const bgCanvas = document.createElement('canvas');
-bgCanvas.width = CW;
-bgCanvas.height = CH;
+bgCanvas.width = Math.floor(CW * DPR);
+bgCanvas.height = Math.floor(CH * DPR);
 const bgCtx = bgCanvas.getContext('2d', {alpha:false});
+bgCtx.setTransform(DPR, 0, 0, DPR, 0, 0);   // las funciones renderBGx dibujan en coords lógicas
+bgCtx.imageSmoothingEnabled = true;
+bgCtx.imageSmoothingQuality = 'high';
 let bgDirty = true;
 
 // ═══════════════════════════════════════════════════════════════
@@ -969,15 +972,31 @@ const TRACKS = {
   }
 };
 
+// Variantes de arpegio (rotan por loop → el tema deja de repetirse igual)
+const ARP_VARIANTS = [
+  [0,1,2,3, 2,1,0,1, 0,1,2,3, 2,1,0,1],   // sube/baja clásico
+  [0,2,1,3, 0,2,1,3, 2,0,3,1, 2,0,3,1],   // saltado
+  [3,2,1,0, 1,2,3,2, 3,2,1,0, 1,2,3,2],   // baja/sube
+  [0,1,0,2, 0,1,0,3, 0,1,0,2, 1,3,2,1],   // pedal en la tónica
+];
+// Motivos de melodía líder (8 corcheas; null = silencio). Dan identidad a cada track.
+const LEAD_MOTIFS = [
+  [null,{idx:2,oct:12},null,{idx:3,oct:12},null,{idx:1,oct:12},{idx:2,oct:12},null],
+  [{idx:3,oct:0},null,{idx:2,oct:0},{idx:3,oct:12},null,{idx:2,oct:0},null,{idx:1,oct:12}],
+  [null,null,{idx:3,oct:12},{idx:2,oct:12},null,{idx:1,oct:12},null,{idx:0,oct:12}],
+  [{idx:0,oct:12},null,null,{idx:2,oct:12},{idx:3,oct:12},null,{idx:2,oct:12},null],
+];
+
 // Programa todas las notas de un compás
-function scheduleBar(track, barIdx, startTime){
+function scheduleBar(track, barIdx, startTime, absBar){
   const beat = (60 / track.bpm) / (window._musicRate || 1);   // 1 negra (acelerable)
   const sixteenth = beat / 4;         // 1 semicorchea
   const eighth = beat / 2;
   const bar = track.pattern[barIdx];
-  // ── ARPEGIO de semicorcheas (16 notas por compás) ──
-  // Patrón Moroder: 1-2-3-4-3-2-1-2-1-2-3-4-3-2-1-2 (subida/bajada)
-  const arpPattern = [0,1,2,3, 2,1,0,1, 0,1,2,3, 2,1,0,1];
+  const loop = Math.floor((absBar || 0) / (track.bars || 4));
+  const seed = track._seed || 0;
+  // ── ARPEGIO de semicorcheas (rota de variante por loop) ──
+  const arpPattern = ARP_VARIANTS[(loop + seed) % ARP_VARIANTS.length];
   for(let i=0;i<16;i++){
     const noteName = bar.chord[arpPattern[i]];
     playNote(startTime + i*sixteenth, nm(noteName), sixteenth*0.95,
@@ -997,6 +1016,23 @@ function scheduleBar(track, barIdx, startTime){
   for(const n of bar.chord){
     playNote(startTime, nm(n) + 0, beat*4 * 0.98,
              {type: 'triangle', vol: 0.08, attack: 0.1, release: 0.2});
+  }
+
+  // ── MELODÍA LÍDER (mundos 1 y 2; el 3 ya tiene su contramelodía) ──
+  // Entra a partir del 2º loop para que el tema "se desarrolle", y cambia
+  // de motivo cada par de loops → cada nivel suena distinto y no se repite igual.
+  if(worldNum !== 3 && loop >= 1){
+    const motif = LEAD_MOTIFS[(seed + (loop >> 1)) % LEAD_MOTIFS.length];
+    const leadType = worldNum === 2 ? 'sawtooth' : 'square';
+    const leadVol = worldNum === 2 ? 0.15 : 0.17;
+    const octBonus = (loop % 4 === 3) ? 12 : 0;   // cada tanto, una octava más brillante
+    for(let i=0;i<8;i++){
+      const step = motif[i];
+      if(!step) continue;
+      const noteName = bar.chord[step.idx % bar.chord.length];
+      playNote(startTime + i*eighth, nm(noteName) + step.oct + octBonus, eighth*0.9,
+               {type: leadType, vol: leadVol, attack: 0.008, release: 0.05});
+    }
   }
 
   // ── MUNDO 3: Contramelodía instrumental (líneas independientes con triangle) ──
@@ -1074,6 +1110,13 @@ function scheduleBar(track, barIdx, startTime){
     // hihat suave en 8th
     for(let i=0;i<8;i++){
       playNoise(startTime + i*eighth, 0.02, {vol: 0.06, cutoff: 7000});
+    }
+  }
+
+  // ── FILL al final de cada loop (último compás): redoble de snare ──
+  if(barIdx === (track.bars - 1) && loop >= 1 && track.drums !== 'sparse'){
+    for(let i=0;i<4;i++){
+      playNoise(startTime + 3*beat + i*sixteenth, 0.03, {vol: 0.16 + i*0.07, cutoff: 3600});
     }
   }
 }
@@ -1228,6 +1271,11 @@ function startMusic(levelKey){
   const track = TRACKS[levelKey];
   if(!track) return;
   if(audioCtx.state === 'suspended') audioCtx.resume();
+  // Semilla por track (hace que cada nivel elija distinto arpegio/melodía)
+  if(track._seed == null){
+    let h = 0; for(let i=0;i<levelKey.length;i++) h = (h*31 + levelKey.charCodeAt(i)) & 0xffff;
+    track._seed = h;
+  }
   const beat = 60 / track.bpm;
   const barDur = beat * 4;
   let nextBarTime = audioCtx.currentTime + 0.1;
@@ -1238,7 +1286,7 @@ function startMusic(levelKey){
   function scheduler(){
     if(stopped) return;
     while(nextBarTime < audioCtx.currentTime + 0.5){
-      scheduleBar(track, barIdx % totalBars, nextBarTime);
+      scheduleBar(track, barIdx % totalBars, nextBarTime, barIdx);
       // Duración del compás afectada por el acelerador (últimos 15s del nivel)
       nextBarTime += barDur / (window._musicRate || 1);
       barIdx++;
@@ -7683,52 +7731,74 @@ function drawDog(wx, wy){
   ctx.ellipse(x+P.w/2, y+P.h+1, P.w/2-2, 2, 0, 0, Math.PI*2);
   ctx.fill();
 
-  // Paleta segun personaje
+  // Paleta segun personaje (+ tonos de luz/sombra para dar volumen)
   const colBody = isDob ? '#1a1a20' : '#b86830';
   const colBodyDark = isDob ? '#000010' : '#7a3c10';
+  const colBodyLite = isDob ? '#34343f' : '#d98a47';   // luz superior del lomo
   const colBelly = isDob ? '#603018' : '#e8b870';
   const colHead = isDob ? '#1a1a20' : '#b86830';
+  const rim = isDob ? 'rgba(130,150,190,0.40)' : 'rgba(255,228,170,0.45)'; // borde iluminado
 
   // Cuerpo (largo de salchicha)
   // Salchicha: bajo y largo. Doberman: un poco más alto y musculoso.
   const bodyH = isDob ? 11 : 9;
   const bodyY = y + P.h - bodyH - 4;
-  // Sombra del cuerpo
+  // Contorno/sombra
   ctx.fillStyle = colBodyDark;
-  ctx.fillRect(x+2, bodyY-1, P.w-4, bodyH+1);
+  ctx.fillRect(x+1, bodyY-1, P.w-2, bodyH+2);
   // Cuerpo principal
   ctx.fillStyle = colBody;
   ctx.fillRect(x+2, bodyY, P.w-4, bodyH);
-  // Panza
+  // Sombra hacia la panza
+  ctx.save(); ctx.globalAlpha = 0.30; ctx.fillStyle = colBodyDark;
+  ctx.fillRect(x+3, bodyY+bodyH-4, P.w-6, 2); ctx.restore();
+  // Luz superior del lomo + rim light
+  ctx.fillStyle = colBodyLite;
+  ctx.fillRect(x+3, bodyY, P.w-6, 2);
+  ctx.fillStyle = rim;
+  ctx.fillRect(x+3, bodyY-1, P.w-6, 1);
+  // Panza con brillo sutil
   ctx.fillStyle = colBelly;
   ctx.fillRect(x+4, bodyY+bodyH-5, P.w-8, 4);
+  ctx.save(); ctx.globalAlpha = 0.14; ctx.fillStyle = '#ffffff';
+  ctx.fillRect(x+5, bodyY+bodyH-5, P.w-10, 1); ctx.restore();
 
   // Cabeza (a la dirección)
   const headW = isDob ? 11 : 10, headH = isDob ? 11 : 10;
   const hx = d > 0 ? x + P.w - headW + 1 : x - 1;
   const hy = y + (isDob ? 0 : 1);
+  // Contorno de la cabeza
+  ctx.fillStyle = colBodyDark;
+  ctx.fillRect(hx-1, hy-1, headW+2, headH+2);
   ctx.fillStyle = colHead;
   ctx.fillRect(hx, hy, headW, headH);
-  // Hocico
+  // Luz superior + rim de la cabeza
+  ctx.fillStyle = colBodyLite;
+  ctx.fillRect(hx, hy, headW, 2);
+  ctx.fillStyle = rim;
+  ctx.fillRect(hx+1, hy-1, headW-2, 1);
+  // Hocico (con brillo arriba)
   ctx.fillStyle = isDob ? '#0a0a10' : '#d8a060';
-  if(d > 0){
-    ctx.fillRect(hx+headW-2, hy+headH-5, 5, 4);
-  } else {
-    ctx.fillRect(hx-3, hy+headH-5, 5, 4);
-  }
-  // Nariz
+  if(d > 0){ ctx.fillRect(hx+headW-2, hy+headH-5, 5, 4); }
+  else      { ctx.fillRect(hx-3, hy+headH-5, 5, 4); }
+  ctx.fillStyle = isDob ? '#26262e' : '#eec79a';
+  if(d > 0){ ctx.fillRect(hx+headW-2, hy+headH-5, 5, 1); }
+  else      { ctx.fillRect(hx-3, hy+headH-5, 5, 1); }
+  // Nariz (con brillito)
   ctx.fillStyle = '#000000';
-  if(d > 0){
-    ctx.fillRect(hx+headW+2, hy+headH-4, 2, 2);
-  } else {
-    ctx.fillRect(hx-3, hy+headH-4, 2, 2);
-  }
-  // Ojo
-  ctx.fillStyle = '#ffffff';
+  if(d > 0){ ctx.fillRect(hx+headW+2, hy+headH-4, 3, 3); }
+  else      { ctx.fillRect(hx-4, hy+headH-4, 3, 3); }
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  if(d > 0){ ctx.fillRect(hx+headW+2, hy+headH-4, 1, 1); }
+  else      { ctx.fillRect(hx-4, hy+headH-4, 1, 1); }
+  // Ojo (blanco + pupila + brillo de vida)
   const ex = d > 0 ? hx + headW - 5 : hx + 1;
-  ctx.fillRect(ex, hy+3, 3, 3);
-  ctx.fillStyle = '#000000';
-  ctx.fillRect(ex+(d>0?1:1), hy+4, 2, 2);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(ex, hy+3, 4, 4);
+  ctx.fillStyle = '#1a1208';
+  ctx.fillRect(ex+1, hy+4, 2, 2);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(ex + (d>0?2:1), hy+4, 1, 1);   // brillo del ojo
   // Orejas (largas para salchicha, puntiagudas para doberman)
   ctx.fillStyle = colBodyDark;
   if(isDob){
@@ -10289,6 +10359,137 @@ function drawPauseOverlay(){
   ctx.restore();
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  POST-PROCESADO — iluminación + partículas de ambiente + bloom + grade
+//  Todo Canvas2D, barato, sin tocar gameplay. Da profundidad y mood.
+// ═══════════════════════════════════════════════════════════════
+const FXBW = Math.floor(CW/2), FXBH = Math.floor(CH/2);
+const fxLight = document.createElement('canvas'); fxLight.width = CW; fxLight.height = CH;
+const fxLightCtx = fxLight.getContext('2d');
+const fxBloom = document.createElement('canvas'); fxBloom.width = FXBW; fxBloom.height = FXBH;
+const fxBloomCtx = fxBloom.getContext('2d');
+let ambientMotes = [];
+
+function fxAmbientCfg(){
+  if(inSubLevel)     return {n:16, col:'#cfc8b0', a:0.16, vx:0.05, vy:-0.05, sz:[0.6,1.4], glow:false, blink:false, w:0.02};
+  if(level === 5)    return {n:22, col:'#bfff70', a:0.6,  vx:0.0,  vy:-0.03, sz:[1.0,1.9], glow:true,  blink:true,  w:0.10}; // luciérnagas
+  if(worldNum === 1) return {n:16, col:'#fff2c0', a:0.18, vx:0.06, vy:-0.04, sz:[0.7,1.5], glow:false, blink:false, w:0.03}; // polen
+  if(worldNum === 2) return {n:22, col:'#9a8a7a', a:0.15, vx:0.03, vy:0.06,  sz:[0.6,1.4], glow:false, blink:false, w:0.02}; // ceniza
+  return                    {n:24, col:'#80ffd0', a:0.40, vx:0.04, vy:-0.06, sz:[0.8,1.6], glow:true,  blink:false, w:0.05}; // mundo 3 energía
+}
+function fxMakeMote(cfg){
+  return {
+    x: Math.random()*CW, y: Math.random()*CH,
+    vx: cfg.vx + (Math.random()-0.5)*0.1,
+    vy: cfg.vy + (Math.random()-0.5)*0.1,
+    sz: cfg.sz[0] + Math.random()*(cfg.sz[1]-cfg.sz[0]),
+    a:  cfg.a * (0.6 + Math.random()*0.4),
+    ph: Math.random()*6.28, baseA: cfg.a
+  };
+}
+function drawAmbient(){
+  const cfg = fxAmbientCfg();
+  while(ambientMotes.length < cfg.n) ambientMotes.push(fxMakeMote(cfg));
+  if(ambientMotes.length > cfg.n) ambientMotes.length = cfg.n;
+  ctx.save();
+  for(const m of ambientMotes){
+    m.ph += cfg.w;
+    m.x += m.vx + Math.sin(m.ph)*cfg.w*1.5;
+    m.y += m.vy + Math.cos(m.ph*0.7)*cfg.w;
+    if(m.x < -6) m.x = CW+6; else if(m.x > CW+6) m.x = -6;
+    if(m.y < -6) m.y = CH+6; else if(m.y > CH+6) m.y = -6;
+    let a = m.a;
+    if(cfg.blink) a = m.baseA * (0.3 + 0.7*Math.abs(Math.sin(m.ph)));
+    ctx.globalAlpha = a;
+    ctx.fillStyle = cfg.col;
+    if(cfg.glow){ ctx.shadowColor = cfg.col; ctx.shadowBlur = m.sz*3.5; }
+    ctx.beginPath(); ctx.arc(m.x, m.y, m.sz, 0, Math.PI*2); ctx.fill();
+    if(cfg.glow) ctx.shadowBlur = 0;
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+function fxAmbientLevel(){
+  if(inSubLevel) return 0.66;
+  if(level === 5) return worldNum === 1 ? 0.84 : (worldNum === 2 ? 0.70 : 0.74);
+  if(worldNum === 1) return 0.97;
+  if(worldNum === 2) return level === 2 ? 0.66 : 0.72;
+  return 0.80; // mundo 3
+}
+function fxAmbientTint(amb){
+  const d = Math.round(255*amb);
+  if(worldNum === 2 || inSubLevel) return `rgb(${Math.round(d*0.9)},${Math.round(d*0.8)},${Math.round(d*0.95)})`;
+  if(worldNum === 3) return `rgb(${Math.round(d*0.85)},${Math.round(d*0.97)},${d})`;
+  if(level === 5)    return `rgb(${Math.round(d*0.8)},${Math.round(d*0.86)},${Math.round(d*0.96)})`;
+  return `rgb(${d},${d},${Math.round(d*0.97)})`;
+}
+function fxLights(){
+  const out = [];
+  const pr = window._princess;
+  if(pr){
+    const px = pr.x-cam.x+pr.w/2;
+    if(px>-70 && px<CW+70) out.push({x:px, y:pr.y+pr.h/2, r:84, c:'255,222,180', i:0.6});
+  }
+  if(inSubLevel && window._cave4ExitX != null){
+    const px = window._cave4ExitX-cam.x;
+    if(px>-70 && px<CW+70) out.push({x:px, y:window._cave4ExitY-22, r:64, c:'150,255,200', i:0.55});
+  }
+  if(window._inMiniBoss && miniBoss && !miniBoss.dead){
+    out.push({x:miniBoss.x-cam.x+miniBoss.w/2, y:miniBoss.y+miniBoss.h/2, r:90, c:'255,120,90', i:0.4});
+  }
+  return out;
+}
+function applyPostFX(){
+  // 1) ILUMINACIÓN
+  const amb = fxAmbientLevel();
+  if(amb < 0.99){
+    fxLightCtx.globalCompositeOperation = 'source-over';
+    fxLightCtx.fillStyle = fxAmbientTint(amb);
+    fxLightCtx.fillRect(0,0,CW,CH);
+    fxLightCtx.globalCompositeOperation = 'lighter';
+    for(const lt of fxLights()){
+      const g = fxLightCtx.createRadialGradient(lt.x, lt.y, lt.r*0.1, lt.x, lt.y, lt.r);
+      g.addColorStop(0, `rgba(${lt.c},${lt.i})`);
+      g.addColorStop(1, `rgba(${lt.c},0)`);
+      fxLightCtx.fillStyle = g;
+      fxLightCtx.fillRect(lt.x-lt.r, lt.y-lt.r, lt.r*2, lt.r*2);
+    }
+    fxLightCtx.globalCompositeOperation = 'source-over';
+    ctx.save();
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.drawImage(fxLight, 0, 0, CW, CH);
+    ctx.restore();
+  }
+  // 2) PARTÍCULAS DE AMBIENTE
+  drawAmbient();
+  // 3) BLOOM
+  try {
+    fxBloomCtx.globalCompositeOperation = 'source-over';
+    fxBloomCtx.clearRect(0,0,FXBW,FXBH);
+    fxBloomCtx.filter = 'blur(2.5px)';
+    fxBloomCtx.drawImage(canvas, 0,0, canvas.width, canvas.height, 0,0, FXBW, FXBH);
+    fxBloomCtx.filter = 'none';
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = (worldNum===3 || level===5 || inSubLevel) ? 0.26 : 0.17;
+    ctx.drawImage(fxBloom, 0,0, FXBW, FXBH, 0,0, CW, CH);
+    ctx.restore();
+  } catch(e){ /* navegador sin lectura de canvas → sin bloom */ }
+  // 4) COLOR GRADE (viñeta cinematográfica suave)
+  ctx.save();
+  const grd = ctx.createRadialGradient(CW/2, CH*0.46, CH*0.30, CW/2, CH*0.5, CH*0.92);
+  grd.addColorStop(0, 'rgba(0,0,0,0)');
+  grd.addColorStop(1, worldNum===2 ? 'rgba(18,4,14,0.34)'
+                    : worldNum===3 ? 'rgba(2,14,20,0.28)'
+                    : inSubLevel   ? 'rgba(6,4,12,0.40)'
+                    : level===5    ? 'rgba(6,8,18,0.32)'
+                    :                'rgba(10,7,2,0.20)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0,0,CW,CH);
+  ctx.restore();
+}
+
 function render(){
   ctx.save();
 
@@ -10313,7 +10514,7 @@ function render(){
     else if(level === 5) renderBG5(bgCtx);
     bgDirty = false;
   }
-  ctx.drawImage(bgCanvas, 0, 0);
+  ctx.drawImage(bgCanvas, 0, 0, CW, CH);
 
   // dynamic parallax
   drawParallax();
@@ -10534,6 +10735,9 @@ function render(){
   }
 
   ctx.restore();
+
+  // ── POST-PROCESADO de la escena (luz + ambiente + bloom + grade) ──
+  if(P) applyPostFX();
 
   // intro overlay (no shake)
   drawLevelIntro();
