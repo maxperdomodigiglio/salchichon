@@ -688,14 +688,11 @@ function scoreFor(raw){
 // Tiles que el jugador y enemigos consideran sólidos
 const SOLID = new Set(['gnd','brk','qb','qbLife','ptop','pbod','ftop','fbod','sld','stone','dngnd','fall','ice','grassIsle','bridge']);
 
-// Caché GPU para fondo estático del nivel actual (a resolución real DPR → nítido)
+// Caché GPU para fondo estático del nivel actual
 const bgCanvas = document.createElement('canvas');
-bgCanvas.width = Math.floor(CW * DPR);
-bgCanvas.height = Math.floor(CH * DPR);
+bgCanvas.width = CW;
+bgCanvas.height = CH;
 const bgCtx = bgCanvas.getContext('2d', {alpha:false});
-bgCtx.setTransform(DPR, 0, 0, DPR, 0, 0);   // las funciones renderBGx dibujan en coords lógicas
-bgCtx.imageSmoothingEnabled = true;
-bgCtx.imageSmoothingQuality = 'high';
 let bgDirty = true;
 
 // ═══════════════════════════════════════════════════════════════
@@ -7731,74 +7728,52 @@ function drawDog(wx, wy){
   ctx.ellipse(x+P.w/2, y+P.h+1, P.w/2-2, 2, 0, 0, Math.PI*2);
   ctx.fill();
 
-  // Paleta segun personaje (+ tonos de luz/sombra para dar volumen)
+  // Paleta segun personaje
   const colBody = isDob ? '#1a1a20' : '#b86830';
   const colBodyDark = isDob ? '#000010' : '#7a3c10';
-  const colBodyLite = isDob ? '#34343f' : '#d98a47';   // luz superior del lomo
   const colBelly = isDob ? '#603018' : '#e8b870';
   const colHead = isDob ? '#1a1a20' : '#b86830';
-  const rim = isDob ? 'rgba(130,150,190,0.40)' : 'rgba(255,228,170,0.45)'; // borde iluminado
 
   // Cuerpo (largo de salchicha)
   // Salchicha: bajo y largo. Doberman: un poco más alto y musculoso.
   const bodyH = isDob ? 11 : 9;
   const bodyY = y + P.h - bodyH - 4;
-  // Contorno/sombra
+  // Sombra del cuerpo
   ctx.fillStyle = colBodyDark;
-  ctx.fillRect(x+1, bodyY-1, P.w-2, bodyH+2);
+  ctx.fillRect(x+2, bodyY-1, P.w-4, bodyH+1);
   // Cuerpo principal
   ctx.fillStyle = colBody;
   ctx.fillRect(x+2, bodyY, P.w-4, bodyH);
-  // Sombra hacia la panza
-  ctx.save(); ctx.globalAlpha = 0.30; ctx.fillStyle = colBodyDark;
-  ctx.fillRect(x+3, bodyY+bodyH-4, P.w-6, 2); ctx.restore();
-  // Luz superior del lomo + rim light
-  ctx.fillStyle = colBodyLite;
-  ctx.fillRect(x+3, bodyY, P.w-6, 2);
-  ctx.fillStyle = rim;
-  ctx.fillRect(x+3, bodyY-1, P.w-6, 1);
-  // Panza con brillo sutil
+  // Panza
   ctx.fillStyle = colBelly;
   ctx.fillRect(x+4, bodyY+bodyH-5, P.w-8, 4);
-  ctx.save(); ctx.globalAlpha = 0.14; ctx.fillStyle = '#ffffff';
-  ctx.fillRect(x+5, bodyY+bodyH-5, P.w-10, 1); ctx.restore();
 
   // Cabeza (a la dirección)
   const headW = isDob ? 11 : 10, headH = isDob ? 11 : 10;
   const hx = d > 0 ? x + P.w - headW + 1 : x - 1;
   const hy = y + (isDob ? 0 : 1);
-  // Contorno de la cabeza
-  ctx.fillStyle = colBodyDark;
-  ctx.fillRect(hx-1, hy-1, headW+2, headH+2);
   ctx.fillStyle = colHead;
   ctx.fillRect(hx, hy, headW, headH);
-  // Luz superior + rim de la cabeza
-  ctx.fillStyle = colBodyLite;
-  ctx.fillRect(hx, hy, headW, 2);
-  ctx.fillStyle = rim;
-  ctx.fillRect(hx+1, hy-1, headW-2, 1);
-  // Hocico (con brillo arriba)
+  // Hocico
   ctx.fillStyle = isDob ? '#0a0a10' : '#d8a060';
-  if(d > 0){ ctx.fillRect(hx+headW-2, hy+headH-5, 5, 4); }
-  else      { ctx.fillRect(hx-3, hy+headH-5, 5, 4); }
-  ctx.fillStyle = isDob ? '#26262e' : '#eec79a';
-  if(d > 0){ ctx.fillRect(hx+headW-2, hy+headH-5, 5, 1); }
-  else      { ctx.fillRect(hx-3, hy+headH-5, 5, 1); }
-  // Nariz (con brillito)
+  if(d > 0){
+    ctx.fillRect(hx+headW-2, hy+headH-5, 5, 4);
+  } else {
+    ctx.fillRect(hx-3, hy+headH-5, 5, 4);
+  }
+  // Nariz
   ctx.fillStyle = '#000000';
-  if(d > 0){ ctx.fillRect(hx+headW+2, hy+headH-4, 3, 3); }
-  else      { ctx.fillRect(hx-4, hy+headH-4, 3, 3); }
-  ctx.fillStyle = 'rgba(255,255,255,0.55)';
-  if(d > 0){ ctx.fillRect(hx+headW+2, hy+headH-4, 1, 1); }
-  else      { ctx.fillRect(hx-4, hy+headH-4, 1, 1); }
-  // Ojo (blanco + pupila + brillo de vida)
+  if(d > 0){
+    ctx.fillRect(hx+headW+2, hy+headH-4, 2, 2);
+  } else {
+    ctx.fillRect(hx-3, hy+headH-4, 2, 2);
+  }
+  // Ojo
+  ctx.fillStyle = '#ffffff';
   const ex = d > 0 ? hx + headW - 5 : hx + 1;
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(ex, hy+3, 4, 4);
-  ctx.fillStyle = '#1a1208';
-  ctx.fillRect(ex+1, hy+4, 2, 2);
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(ex + (d>0?2:1), hy+4, 1, 1);   // brillo del ojo
+  ctx.fillRect(ex, hy+3, 3, 3);
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(ex+(d>0?1:1), hy+4, 2, 2);
   // Orejas (largas para salchicha, puntiagudas para doberman)
   ctx.fillStyle = colBodyDark;
   if(isDob){
@@ -10514,7 +10489,7 @@ function render(){
     else if(level === 5) renderBG5(bgCtx);
     bgDirty = false;
   }
-  ctx.drawImage(bgCanvas, 0, 0, CW, CH);
+  ctx.drawImage(bgCanvas, 0, 0);
 
   // dynamic parallax
   drawParallax();
@@ -10735,9 +10710,6 @@ function render(){
   }
 
   ctx.restore();
-
-  // ── POST-PROCESADO de la escena (luz + ambiente + bloom + grade) ──
-  if(P) applyPostFX();
 
   // intro overlay (no shake)
   drawLevelIntro();
