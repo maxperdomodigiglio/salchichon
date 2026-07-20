@@ -670,7 +670,7 @@ let difficultyMul = 1.0;
 let difficultyKey = 'normal';                       // 'easy' | 'normal' | 'hard'
 // Progresión de velocidad por mundo MUCHO más suave que antes (antes 1/2/2.5).
 // Esto soluciona el "todo va tan rápido que no se entiende" del mundo 2 y 3.
-const WORLD_SPEED_BASE = { 1: 1.0, 2: 1.15, 3: 1.30 };
+const WORLD_SPEED_BASE = { 1: 1.0, 2: 1.15, 3: 1.30, 4: 1.45 };
 function computeEnemySpeedMul(){
   return (WORLD_SPEED_BASE[worldNum] || 1.0) * difficultyMul;
 }
@@ -978,6 +978,64 @@ const TRACKS = {
       {chord:['G3','B3','D4','F4'],   bass:'G2', pad:'G3'},   // G7 (V dom)
     ],
     drums: 'rock', arpType: 'triangle'
+  },
+  // ═══════════════════════════════════════════════════════
+  //  MUNDO 4 — LEYENDA: heroico total, tempos altos, mayor brillo
+  // ═══════════════════════════════════════════════════════
+  // ───── 4-1 PRADERA LEGENDARIA (E mayor triunfal, 150) ─────
+  w4l1: {
+    bpm: 150, bars: 4,
+    pattern: [
+      {chord:['E3','G#3','B3','E4'],  bass:'E2',  pad:'E3'},
+      {chord:['A3','C#4','E4','A4'],  bass:'A2',  pad:'A3'},
+      {chord:['B3','D#4','F#4','B4'], bass:'B2',  pad:'B3'},
+      {chord:['C#4','E4','G#4','C#5'],bass:'C#2', pad:'C#3'},
+    ],
+    drums: 'rock', arpType: 'square'
+  },
+  // ───── 4-2 CAVERNA DEL LEÓN (Am épico oscuro, 128) ─────
+  w4l2: {
+    bpm: 128, bars: 4,
+    pattern: [
+      {chord:['A3','C4','E4','A4'],   bass:'A2',  pad:'A3'},
+      {chord:['F3','A3','C4','F4'],   bass:'F2',  pad:'F3'},
+      {chord:['C3','E3','G3','C4'],   bass:'C2',  pad:'C3'},
+      {chord:['E3','G#3','B3','E4'],  bass:'E2',  pad:'E3'},
+    ],
+    drums: 'disco', arpType: 'square'
+  },
+  // ───── 4-3 GALLINERO SUPREMO (D mixolidio frenético, 160) ─────
+  w4l3: {
+    bpm: 160, bars: 4,
+    pattern: [
+      {chord:['D3','F#3','A3','C4'],  bass:'D2',  pad:'D3'},
+      {chord:['C3','E3','G3','C4'],   bass:'C2',  pad:'C3'},
+      {chord:['G3','B3','D4','G4'],   bass:'G2',  pad:'G3'},
+      {chord:['D3','F#3','A3','D4'],  bass:'D2',  pad:'D3'},
+    ],
+    drums: 'rock', arpType: 'square'
+  },
+  // ───── 4-4 NORDEL DORADO (Bb lidio majestuoso, 138) ─────
+  w4l4: {
+    bpm: 138, bars: 4,
+    pattern: [
+      {chord:['Bb3','D4','F4','A4'],  bass:'Bb2', pad:'Bb3'},
+      {chord:['C4','E4','G4','C5'],   bass:'C3',  pad:'C4'},
+      {chord:['D4','F4','A4','D5'],   bass:'D3',  pad:'D4'},
+      {chord:['F3','A3','C4','F4'],   bass:'F2',  pad:'F3'},
+    ],
+    drums: 'disco', arpType: 'triangle'
+  },
+  // ───── 4-5 PANTANO DE LA LEYENDA (Em dramático final, 118) ─────
+  w4l5: {
+    bpm: 118, bars: 4,
+    pattern: [
+      {chord:['E3','G3','B3','E4'],   bass:'E2',  pad:'E3'},
+      {chord:['C3','E3','G3','C4'],   bass:'C2',  pad:'C3'},
+      {chord:['A3','C4','E4','A4'],   bass:'A2',  pad:'A3'},
+      {chord:['B3','D#4','F#4','A4'], bass:'B2',  pad:'B3'},
+    ],
+    drums: 'rock', arpType: 'triangle'
   }
 };
 
@@ -1030,7 +1088,7 @@ function scheduleBar(track, barIdx, startTime, absBar){
   // ── MELODÍA LÍDER (mundos 1 y 2; el 3 ya tiene su contramelodía) ──
   // Entra a partir del 2º loop para que el tema "se desarrolle", y cambia
   // de motivo cada par de loops → cada nivel suena distinto y no se repite igual.
-  if(worldNum !== 3 && loop >= 1){
+  if(worldNum < 3 && loop >= 1){
     const motif = LEAD_MOTIFS[(seed + (loop >> 1)) % LEAD_MOTIFS.length];
     const leadType = worldNum === 2 ? 'sawtooth' : 'square';
     const leadVol = worldNum === 2 ? 0.15 : 0.17;
@@ -1044,8 +1102,8 @@ function scheduleBar(track, barIdx, startTime, absBar){
     }
   }
 
-  // ── MUNDO 3: Contramelodía instrumental (líneas independientes con triangle) ──
-  if(worldNum === 3){
+  // ── MUNDOS 3 y 4: Contramelodía instrumental (líneas independientes con triangle) ──
+  if(worldNum >= 3){
     // Melodía rítmica: corcheas con notas del acorde en alturas variables
     // Patrón melódico (índices de la nota en el acorde, octava +0 ó +12)
     const melodyPattern = [
@@ -1622,7 +1680,7 @@ function loadSave(){
     const data = JSON.parse(raw);
     if(data.v !== 1) return null;
     // Validar campos críticos
-    if(typeof data.worldNum !== 'number' || data.worldNum < 1 || data.worldNum > 3) return null;
+    if(typeof data.worldNum !== 'number' || data.worldNum < 1 || data.worldNum > 4) return null;
     if(typeof data.level !== 'number' || data.level < 1 || data.level > 5) return null;
     if(typeof data.lives !== 'number' || data.lives < 1) return null;
     return data;
@@ -2030,7 +2088,7 @@ function hud(){
     'NORDELTOPOLIS',
     'PANTANO NOCTURNO'
   ];
-  const worldPrefix = worldNum === 1 ? '' : (worldNum === 2 ? 'TÉTRICO · ' : 'FRENÉTICO · ');
+  const worldPrefix = worldNum === 1 ? '' : worldNum === 2 ? 'TÉTRICO · ' : worldNum === 3 ? 'FRENÉTICO · ' : 'LEYENDA · ';
   document.getElementById('h-title').textContent = '★ MUNDO ' + worldNum + '-' + level + ' · ' + worldPrefix + (baseTitles[level-1] || '');
   const ammoEl = document.getElementById('h-ammo');
   ammoEl.style.display = shots>0 ? 'inline-flex' : 'none';
@@ -2149,7 +2207,8 @@ function markMagicBlock(){
   const targets = {
     1: 2,   // mundo 1, nivel 2 (caverna)
     2: 4,   // mundo 2, nivel 4 (nordeltopolis)
-    3: 5    // mundo 3, nivel 5 (pantano final)
+    3: 5,   // mundo 3, nivel 5 (pantano final)
+    4: 5    // mundo 4, nivel 5 (pantano de la leyenda)
   };
   if(targets[worldNum] !== level) return;
   // Encontrar todos los bloques qb (no qbLife)
@@ -2173,11 +2232,11 @@ function applyWorldModifiers(){
   }
   // 2) Mundo 2 y 3: ratitas frenéticas — menos cantidad que antes para no saturar (10 en M2, 14 en M3).
   if(worldNum >= 2 && !inSubLevel){
-    spawnFrenzyRats(worldNum === 2 ? 10 : 14);
+    spawnFrenzyRats(worldNum === 2 ? 10 : (worldNum === 3 ? 14 : 18));
   }
   // 3) Mundo 3: gorriones erráticos — reducidos de 8 a 6.
   if(worldNum >= 3 && !inSubLevel){
-    spawnSparrows(6);
+    spawnSparrows(worldNum === 3 ? 6 : 8);
   }
   // 4) Marcar bloque mágico (power-up) si corresponde al nivel
   if(!inSubLevel) markMagicBlock();
@@ -2389,7 +2448,7 @@ function buildLevel1(){
 
   // Entrada al CUARTO SECRETO DEL MINI JEFE (rata gigante) — sólo en 3-1.
   // Usa la boca de incendio de x=70 (el Bubble Bobble sigue en x=142).
-  if(worldNum === 3){
+  if(worldNum >= 3){
     window._miniEntryX = 70*TILE + TILE;   // centro de la boca (tiles 70 y 71)
     window._miniEntryY = (12 - 2)*TILE;     // h=2 → tope en fila 10
   }
@@ -2652,7 +2711,7 @@ function buildLevel2(){
   });
 
   // ── EL JEFE — Gato Rey (M1), Tigre Rey (M2), León Rey (M3) ──
-  const bossHp = worldNum === 1 ? 8 : (worldNum === 2 ? 14 : 22);
+  const bossHp = worldNum === 1 ? 8 : worldNum === 2 ? 14 : worldNum === 3 ? 22 : 30;
   const bossVariant = worldNum === 1 ? 'cat' : (worldNum === 2 ? 'tiger' : 'lion');
   boss = {
     x:(BOSS_START+11)*TILE, y:9*TILE,
@@ -2674,7 +2733,7 @@ function buildLevel2(){
 
   // Entrada al CUARTO SECRETO DEL MINI JEFE (rata gigante) — sólo en 3-2.
   // La caverna no tiene bocas: agregamos un TUBO VERDE sobre el suelo en x=78.
-  if(worldNum === 3){
+  if(worldNum >= 3){
     pipe(78, 2);                            // ptop fila 11, pbod fila 10
     window._miniEntryX = 78*TILE + TILE;
     window._miniEntryY = (12 - 2)*TILE;     // tope en fila 10
@@ -2957,7 +3016,7 @@ function buildLevel3Henhouse(){
 
   // Entrada al CUARTO SECRETO DEL MINI JEFE (rata gigante) — en 2-3 y 3-3.
   // Usa la boca de incendio central de x=135.
-  if(worldNum === 2 || worldNum === 3){
+  if(worldNum >= 2){
     window._miniEntryX = 135*TILE + TILE;
     window._miniEntryY = (12 - 2)*TILE;     // h=2 → tope en fila 10
   }
@@ -3413,7 +3472,7 @@ function buildLevel5(){
     w: 28, h: 18,
     bobT: 0, blinkT: 0, rescued: false, grounded: true, throne: true,
     cheer: 0,
-    variant: worldNum === 1 ? 'lulu' : (worldNum === 2 ? 'turna' : 'bamby')
+    variant: worldNum === 1 ? 'lulu' : worldNum === 2 ? 'turna' : worldNum === 3 ? 'bamby' : 'miel'
   };
 
   // ── HUESOS — distribuidos sobre las islas ──
@@ -3537,7 +3596,7 @@ function buildLevel5(){
   // ── CARPINCHO MADRE — boss final del nivel 5 ──
   // Patrulla entre las últimas islas (155-180) por agua/tierra.
   // En mundo 3 también aparece el Padre montado en cocodrilo.
-  const motherHp = worldNum === 1 ? 6 : (worldNum === 2 ? 10 : 14);
+  const motherHp = worldNum === 1 ? 6 : worldNum === 2 ? 10 : worldNum === 3 ? 14 : 18;
   boss = {
     x: 165*TILE, y: 10*TILE - 4,
     w: 56, h: 36,
@@ -3558,8 +3617,8 @@ function buildLevel5(){
     w: TILE, h: 4*TILE,
     open: false
   };
-  // En mundo 3, además el carpincho PADRE sobre un cocodrilo
-  if(worldNum === 3){
+  // En mundos 3 y 4, además el carpincho PADRE sobre un cocodrilo
+  if(worldNum >= 3){
     boss.father = {
       x: 158*TILE, y: water.surfaceY - 18,
       w: 50, h: 24,         // cuerpo (cocodrilo) + jinete (carpincho)
@@ -4422,7 +4481,7 @@ function updateBoss(){
   }
 
   // Velocidad base — escala con mundo y enojo. Velocidades altas, IA decide la dirección.
-  const worldSpdMul = (worldNum === 1 ? 1.0 : (worldNum === 2 ? 1.35 : 1.65)) * difficultyMul;
+  const worldSpdMul = (worldNum === 1 ? 1.0 : worldNum === 2 ? 1.35 : worldNum === 3 ? 1.65 : 1.85) * difficultyMul;
   const baseChase = (boss.angry ? 3.2 : 2.0) * worldSpdMul;
   const dashSpd = (boss.angry ? 6.5 : 5.2) * worldSpdMul;
 
@@ -4725,7 +4784,7 @@ function updateBoss5(){
     boss.diveCooldown = 280;
   }
 
-  const worldSpdMul = (worldNum === 1 ? 1.0 : (worldNum === 2 ? 1.35 : 1.7)) * difficultyMul;
+  const worldSpdMul = (worldNum === 1 ? 1.0 : worldNum === 2 ? 1.35 : worldNum === 3 ? 1.7 : 1.9) * difficultyMul;
   const baseSpd = (boss.angry ? 2.8 : 1.8) * worldSpdMul;
   const chargeSpd = (boss.angry ? 6 : 5) * worldSpdMul;
 
@@ -5402,7 +5461,7 @@ function triggerBossDefeatTransition(){
       return;
     }
     // Caso 2: Boss del nivel 5 — fin del mundo actual
-    if(worldNum < 3){
+    if(worldNum < 4){
       // Pantalla de rescate de la princesa + avanzar al siguiente MUNDO
       const finishedWorld = worldNum;
       showWorldComplete(finishedWorld, ()=>{
@@ -5416,8 +5475,8 @@ function triggerBossDefeatTransition(){
         requestAnimationFrame(loop);
       });
     } else {
-      // Mundo 3 - nivel 5 → rescate de Bamby + VICTORIA TOTAL
-      showWorldComplete(3, ()=>{
+      // Mundo 4 - nivel 5 → rescate de Miel + VICTORIA TOTAL
+      showWorldComplete(4, ()=>{
         showFinalVictory();
       });
     }
@@ -6449,7 +6508,7 @@ function checkFlag(){
       return;
     }
     // level === 5: fin del mundo actual
-    if(worldNum < 3){
+    if(worldNum < 4){
       const finishedWorld = worldNum;
       startWorldCutscene(finishedWorld, ()=>{
         showWorldComplete(finishedWorld, ()=>{
@@ -6464,9 +6523,9 @@ function checkFlag(){
         });
       });
     } else {
-      // Mundo 3 - nivel 5 → rescate de Bamby + VICTORIA FINAL
-      startWorldCutscene(3, ()=>{
-        showWorldComplete(3, ()=>{ showFinalVictory(); });
+      // Mundo 4 - nivel 5 → rescate de Miel + VICTORIA FINAL
+      startWorldCutscene(4, ()=>{
+        showWorldComplete(4, ()=>{ showFinalVictory(); });
       });
     }
   }
@@ -7294,7 +7353,7 @@ function drawParallax(){
   // ═══ CAPA EXTRA DEL MUNDO 3 (FRENÉTICO) ═══
   // Se dibuja DETRÁS del parallax propio del nivel. Cada elemento aparece/intensifica
   // según el número de nivel, así el mundo se ve cada vez más desarrollado hacia 3-5.
-  if(worldNum === 3 && !inSubLevel){
+  if(worldNum >= 3 && !inSubLevel){
     const L = level;                       // 1..5
     // 1) ISLAS FLOTANTES DE CRISTAL lejanas (desde 3-1, más cantidad por nivel)
     const isleN = 3 + L;                    // 4 .. 8
@@ -9863,6 +9922,7 @@ function drawPrincess(){
   const glow = 0.5 + Math.sin(fc*0.07)*0.5;
   const auraCol = f.variant === 'bamby' ? 'rgba(220,180,200,'
                 : f.variant === 'turna' ? 'rgba(220,200,255,'
+                : f.variant === 'miel' ? 'rgba(255,205,120,'
                 : 'rgba(255,150,180,';
   ctx.fillStyle = auraCol +(0.15+glow*0.12)+')';
   ctx.beginPath();
@@ -9898,6 +9958,8 @@ function drawPrincess(){
     drawPrincessTurna(f, x, y);
   } else if(f.variant === 'bamby'){
     drawPrincessBamby(f, x, y);
+  } else if(f.variant === 'miel'){
+    drawPrincessMiel(f, x, y);
   } else {
     drawPrincessLulu(f, x, y);
   }
@@ -9907,9 +9969,11 @@ function drawPrincess(){
   if(distToPlayer < 200){
     const name = f.variant === 'turna' ? '♥ TURNA ♥'
               : f.variant === 'bamby' ? '♥ REINA BAMBY ♥'
+              : f.variant === 'miel' ? '♥ PRINCESA MIEL ♥'
               : '♥ LULU ♥';
     const nameCol = f.variant === 'turna' ? '#c080ff'
                   : f.variant === 'bamby' ? '#ffb0c0'
+                  : f.variant === 'miel' ? '#ffd07a'
                   : '#fff';
     const alpha = Math.max(0.4, 1 - distToPlayer/200);
     ctx.save();
@@ -10194,6 +10258,71 @@ function drawPrincessBamby(f, x, y){
   ctx.stroke();
 }
 
+// ── MIEL: salchicha dorada de pelo largo (princesa del mundo 4) — sprite in-game ──
+function drawPrincessMiel(f, x, y){
+  // Cuerpo dorado
+  ctx.fillStyle = '#d8a44c';
+  ctx.beginPath();
+  ctx.roundRect(x+1, y+f.h*0.4, f.w-2, f.h*0.5, 5);
+  ctx.fill();
+  // Pelo largo del lomo
+  ctx.fillStyle = '#eec278';
+  ctx.fillRect(x+3, y+f.h*0.4, f.w-6, 3);
+  // Panza clara
+  ctx.fillStyle = '#f6e0b0';
+  ctx.fillRect(x+4, y+f.h*0.65, f.w-8, f.h*0.25);
+  // Patitas
+  ctx.fillStyle = '#b0803a';
+  ctx.fillRect(x+4, y+f.h-3, 3, 4);
+  ctx.fillRect(x+f.w-7, y+f.h-3, 3, 4);
+  // Cabeza
+  ctx.fillStyle = '#e0ac54';
+  ctx.beginPath();
+  ctx.roundRect(x+f.w-12, y, 12, 11, 4);
+  ctx.fill();
+  // Hocico
+  ctx.fillStyle = '#c08c3c';
+  ctx.beginPath();
+  ctx.roundRect(x+f.w-6, y+5, 6, 4, 2);
+  ctx.fill();
+  // Nariz
+  ctx.fillStyle = '#1a1a1a';
+  ctx.beginPath(); ctx.arc(x+f.w-1, y+6, 1.2, 0, Math.PI*2); ctx.fill();
+  // Oreja caída con pelo largo
+  ctx.fillStyle = '#c08c3c';
+  ctx.beginPath();
+  ctx.ellipse(x+f.w-10, y+4, 2.6, 5.4, -0.35, 0, Math.PI*2);
+  ctx.fill();
+  // Ojos dulces
+  const blinkM = (f.blinkT % 200) < 8;
+  if(!blinkM){
+    ctx.fillStyle = '#2a180a';
+    ctx.beginPath();
+    ctx.arc(x+f.w-8.5, y+3.6, 1.2, 0, Math.PI*2);
+    ctx.arc(x+f.w-3.5, y+3.6, 1.2, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(x+f.w-9, y+3, 0.6, 0.6);
+    ctx.fillRect(x+f.w-4, y+3, 0.6, 0.6);
+  }
+  // Tiara de flores
+  ctx.fillStyle = '#ff8fb0';
+  ctx.beginPath();
+  ctx.arc(x+f.w-10, y-1.5, 1.6, 0, Math.PI*2);
+  ctx.arc(x+f.w-6, y-2.5, 1.6, 0, Math.PI*2);
+  ctx.arc(x+f.w-2, y-1.5, 1.6, 0, Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = '#ffe084';
+  ctx.beginPath();
+  ctx.arc(x+f.w-10, y-1.5, 0.7, 0, Math.PI*2);
+  ctx.arc(x+f.w-6, y-2.5, 0.7, 0, Math.PI*2);
+  ctx.arc(x+f.w-2, y-1.5, 0.7, 0, Math.PI*2);
+  ctx.fill();
+  // Colita
+  ctx.fillStyle = '#d8a44c';
+  ctx.fillRect(x-2, y+f.h*0.45, 3, 3);
+}
+
 // Render de cables de luz para el gallinero (nivel 3 mundos 2/3)
 function drawPowerLines(){
   if(!window._powerLines || window._powerLines.length === 0) return;
@@ -10377,7 +10506,7 @@ function drawLevelIntro(){
   ];
   const info = baseTitles[level-1];
   if(!info) return;
-  const worldName = worldNum === 1 ? '' : (worldNum === 2 ? ' TÉTRICO' : ' FRENÉTICO');
+  const worldName = worldNum === 1 ? '' : worldNum === 2 ? ' TÉTRICO' : worldNum === 3 ? ' FRENÉTICO' : ' LEYENDA';
   const titleColor = worldNum === 1 ? info.c1 : (worldNum === 2 ? info.c2 : info.c3);
   ctx.save();
   ctx.globalAlpha = alpha * 0.85;
@@ -10499,7 +10628,7 @@ function fxLights(){
   }
   return out;
 }
-const POSTFX_ON = true;   // ← poné false si notás caída de FPS en equipos viejos
+const POSTFX_ON = false;  // DESACTIVADO: el bloom leía el canvas en pleno frame y hacía titilar el juego
 function applyPostFX(){
   // 1) ILUMINACIÓN
   const amb = fxAmbientLevel();
@@ -10608,6 +10737,21 @@ function render(){
     const vig = ctx.createRadialGradient(CW/2, CH*0.45, CH*0.25, CW/2, CH*0.45, CH*0.9);
     vig.addColorStop(0, 'rgba(0,0,0,0)');
     vig.addColorStop(1, `rgba(4, 18, 26, ${0.25 + lvlBoost*0.2})`);
+    ctx.fillStyle = vig;
+    ctx.fillRect(0, 0, CW, CH);
+  } else if(worldNum === 4 && !inSubLevel){
+    // Mundo LEYENDA: velo dorado cálido + viñeta carmesí
+    const lvlBoost = (level - 1) / 4;
+    ctx.fillStyle = `rgba(255, 170, 60, ${0.05 + lvlBoost*0.06})`;
+    ctx.fillRect(0, 0, CW, CH);
+    const aur = ctx.createLinearGradient(0, 0, 0, CH);
+    aur.addColorStop(0, `rgba(255, 220, 120, ${0.07 + lvlBoost*0.10})`);
+    aur.addColorStop(0.45, 'rgba(255, 220, 120, 0)');
+    ctx.fillStyle = aur;
+    ctx.fillRect(0, 0, CW, CH*0.6);
+    const vig = ctx.createRadialGradient(CW/2, CH*0.45, CH*0.25, CW/2, CH*0.45, CH*0.9);
+    vig.addColorStop(0, 'rgba(0,0,0,0)');
+    vig.addColorStop(1, `rgba(40, 8, 8, ${0.22 + lvlBoost*0.2})`);
     ctx.fillStyle = vig;
     ctx.fillRect(0, 0, CW, CH);
   }
@@ -10812,7 +10956,7 @@ function render(){
   // Cartel épico durante la cutscene de rescate
   if(cutscene){
     const pr = window._princess;
-    const name = pr ? (pr.variant === 'turna' ? 'TURNA' : pr.variant === 'bamby' ? 'REINA BAMBY' : 'LULU') : 'LA REINA';
+    const name = pr ? (pr.variant === 'turna' ? 'TURNA' : pr.variant === 'bamby' ? 'REINA BAMBY' : pr.variant === 'miel' ? 'PRINCESA MIEL' : 'LULU') : 'LA REINA';
     ctx.save();
     ctx.textAlign = 'center';
     ctx.shadowColor = '#000'; ctx.shadowBlur = 8;
@@ -11020,18 +11164,22 @@ function showWorldComplete(worldFinished, onContinue){
   stopMusic();
   const princessName = worldFinished === 1 ? 'Lulu'
                     : worldFinished === 2 ? 'Turna'
-                    : 'Bamby';
+                    : worldFinished === 3 ? 'Bamby'
+                    : 'Miel';
   const princessDesc = worldFinished === 1 ? 'la Bichón Maltés de la pradera'
-                    : worldFinished === 2 ? 'la Bulldog Francés tétrica'
-                    : 'la Reina Madre del pantano';
+                    : worldFinished === 2 ? 'la salchicha con cara de bulldog francés'
+                    : worldFinished === 3 ? 'la Reina Madre del pantano'
+                    : 'la princesita dorada del reino';
   const nextWorld = worldFinished + 1;
   const nextLabel = nextWorld === 2 ? 'MUNDO 2 — TÉTRICO'
                   : nextWorld === 3 ? 'MUNDO 3 — FRENÉTICO'
+                  : nextWorld === 4 ? 'MUNDO 4 — LEYENDA'
                   : 'FIN';
-  const variant = worldFinished === 1 ? 'lulu' : worldFinished === 2 ? 'turna' : 'bamby';
+  const variant = worldFinished === 1 ? 'lulu' : worldFinished === 2 ? 'turna' : worldFinished === 3 ? 'bamby' : 'miel';
   const accentColor = variant === 'lulu' ? '#ff80a0'
                     : variant === 'turna' ? '#c080ff'
-                    : '#ffd34d';
+                    : variant === 'bamby' ? '#ffd34d'
+                    : '#ffb35c';
   const msg = document.getElementById('msg');
   msg.innerHTML = `
     <div class="msg-card msg-card-win">
@@ -11041,9 +11189,9 @@ function showWorldComplete(worldFinished, onContinue){
         <canvas id="princess-final" width="260" height="170" style="background:linear-gradient(180deg,#1a2438,#08121c);border-radius:10px;box-shadow:0 4px 18px ${accentColor}66"></canvas>
       </div>
       <p class="msg-sub" style="font-size:13px;color:${accentColor};margin-top:0">
-        ${nextWorld <= 3 ? '★ Próximo: ' + nextLabel + ' ★' : ''}
+        ${nextWorld <= 4 ? '★ Próximo: ' + nextLabel + ' ★' : ''}
       </p>
-      <button class="action-btn" id="msg-btn">${nextWorld <= 3 ? 'AVANZAR' : 'CONTINUAR'}</button>
+      <button class="action-btn" id="msg-btn">${nextWorld <= 4 ? 'AVANZAR' : 'CONTINUAR'}</button>
     </div>
   `;
   msg.classList.remove('hidden');
@@ -11057,10 +11205,11 @@ function showWorldComplete(worldFinished, onContinue){
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  ESCENAS DE VICTORIA ANIMADAS
-//  Motor liviano por canvas (rAF): fuegos artificiales, confeti,
-//  corazones flotantes y retratos animados de las reinas.
-//  Se autodetiene cuando el canvas sale del DOM.
+//  ESCENAS DE VICTORIA ANIMADAS (v2)
+//  - Lógica avanzada a 60 pasos/seg REALES (independiente del refresco
+//    del monitor: en 120/144Hz ya no corre al doble de velocidad).
+//  - Retratos de las reinas rehechos: formas suaves, contorno sutil,
+//    animación LENTA (respiración, parpadeo cada ~5s, vaivén de orejas).
 // ═══════════════════════════════════════════════════════════════
 const _sceneAnims = {};
 function startSceneAnim(canvasId, drawFn){
@@ -11070,13 +11219,21 @@ function startSceneAnim(canvasId, drawFn){
   const st = {
     t: 0, c, g: c.getContext('2d'),
     W: c.width, H: c.height,
-    fw: [], hearts: [], confetti: [], raf: 0
+    fw: [], hearts: [], confetti: [], raf: 0,
+    _last: 0, _acc: 0
   };
   _sceneAnims[canvasId] = st;
-  const frame = ()=>{
+  const frame = (ts)=>{
     if(!c.isConnected){ delete _sceneAnims[canvasId]; return; }
-    st.t++;
-    drawFn(st);
+    if(!st._last) st._last = ts;
+    let dt = ts - st._last;
+    st._last = ts;
+    if(dt > 100) dt = 16.7;
+    st._acc += dt;
+    let steps = 0;
+    while(st._acc >= 16.666 && steps < 3){ st.t++; st._acc -= 16.666; steps++; }
+    if(st._acc >= 16.666) st._acc = 0;
+    if(steps > 0) drawFn(st);          // dibuja como máximo a 60fps
     st.raf = requestAnimationFrame(frame);
   };
   st.raf = requestAnimationFrame(frame);
@@ -11090,12 +11247,12 @@ function stopSceneAnim(canvasId){
 const SCENE_FW_COLS = ['#ff5a6e','#ffd34d','#5ce8a4','#5cb8ff','#ff8fd0','#fff6d8','#c792ff'];
 function sceneSpawnFirework(st, x, y){
   const col = SCENE_FW_COLS[(Math.random()*SCENE_FW_COLS.length)|0];
-  const n = 22 + (Math.random()*10|0);
+  const n = 20 + (Math.random()*8|0);
   for(let i=0;i<n;i++){
     const a = (i/n)*Math.PI*2 + Math.random()*0.2;
-    const sp = 0.8 + Math.random()*1.8;
-    st.fw.push({ x, y, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp - 0.3,
-      col, life: 34 + (Math.random()*22|0), tw: Math.random()*6.28 });
+    const sp = 0.7 + Math.random()*1.5;
+    st.fw.push({ x, y, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp - 0.25,
+      col, life: 40 + (Math.random()*24|0), tw: Math.random()*6.28 });
   }
 }
 function sceneUpdateDrawFireworks(st){
@@ -11103,10 +11260,10 @@ function sceneUpdateDrawFireworks(st){
   for(let i=st.fw.length-1; i>=0; i--){
     const p = st.fw[i];
     p.x += p.vx; p.y += p.vy;
-    p.vx *= 0.985; p.vy = p.vy*0.985 + 0.028;
+    p.vx *= 0.985; p.vy = p.vy*0.985 + 0.024;
     p.life--;
     if(p.life <= 0){ st.fw.splice(i,1); continue; }
-    const a = Math.min(1, p.life/26) * (0.6 + 0.4*Math.sin(p.tw + st.t*0.35));
+    const a = Math.min(1, p.life/30) * (0.75 + 0.25*Math.sin(p.tw + st.t*0.12));
     g.globalAlpha = Math.max(0, a);
     g.fillStyle = p.col;
     g.fillRect(p.x-1, p.y-1, 2, 2);
@@ -11128,17 +11285,17 @@ function sceneHeart(g, x, y, s, col){
 }
 function sceneUpdateDrawHearts(st, col){
   const g = st.g;
-  if(st.t % 34 === 0 && st.hearts.length < 10){
+  if(st.t % 46 === 0 && st.hearts.length < 8){
     st.hearts.push({ x: 14 + Math.random()*(st.W-28), y: st.H + 8,
-      s: 2.4 + Math.random()*2.6, ph: Math.random()*6.28, v: 0.28 + Math.random()*0.3 });
+      s: 2.2 + Math.random()*2.4, ph: Math.random()*6.28, v: 0.22 + Math.random()*0.22 });
   }
   for(let i=st.hearts.length-1; i>=0; i--){
     const h = st.hearts[i];
-    h.y -= h.v; h.ph += 0.05;
+    h.y -= h.v; h.ph += 0.03;
     if(h.y < -10){ st.hearts.splice(i,1); continue; }
     const a = h.y > st.H*0.55 ? 1 : Math.max(0, h.y/(st.H*0.55));
-    g.globalAlpha = 0.65 * a;
-    sceneHeart(g, h.x + Math.sin(h.ph)*5, h.y, h.s, col);
+    g.globalAlpha = 0.6 * a;
+    sceneHeart(g, h.x + Math.sin(h.ph)*4, h.y, h.s, col);
   }
   g.globalAlpha = 1;
 }
@@ -11156,7 +11313,7 @@ function sceneSparkle(g, x, y, r, a, col){
   g.restore();
 }
 
-// Fondo animado por variante (atardecer / noche gótica / aurora)
+// Fondo animado por variante
 function sceneBackdrop(st, variant){
   const g = st.g, W = st.W, H = st.H, t = st.t;
   let grad = g.createLinearGradient(0,0,0,H);
@@ -11165,79 +11322,77 @@ function sceneBackdrop(st, variant){
     grad.addColorStop(0.8,'#e8925c'); grad.addColorStop(1,'#3f8c2e');
   } else if(variant === 'turna'){
     grad.addColorStop(0,'#140a26'); grad.addColorStop(0.6,'#31184a'); grad.addColorStop(1,'#1d0f30');
+  } else if(variant === 'miel'){
+    grad.addColorStop(0,'#3a2352'); grad.addColorStop(0.5,'#b3502f');
+    grad.addColorStop(0.78,'#f0a03c'); grad.addColorStop(1,'#7a5a1c');
   } else {
     grad.addColorStop(0,'#071c2c'); grad.addColorStop(0.55,'#134a56'); grad.addColorStop(1,'#0a3a30');
   }
   g.fillStyle = grad; g.fillRect(0,0,W,H);
-  // Estrellas titilantes
-  for(let i=0;i<26;i++){
+  // Estrellas titilando despacio
+  for(let i=0;i<24;i++){
     const sx = (i*37+13) % W;
     const sy = (i*23+7) % (H*0.6|0);
-    const tw = 0.35 + 0.65*Math.abs(Math.sin(t*0.03 + i*1.7));
-    g.globalAlpha = (variant==='lulu' ? 0.35 : 0.8) * tw;
+    const tw = 0.4 + 0.6*Math.abs(Math.sin(t*0.012 + i*1.7));
+    g.globalAlpha = ((variant==='lulu'||variant==='miel') ? 0.3 : 0.75) * tw;
     g.fillStyle = '#fff';
     g.fillRect(sx, sy, (i%9===0)?2:1, (i%9===0)?2:1);
   }
   g.globalAlpha = 1;
-  if(variant === 'lulu'){
-    // Sol poniente con rayos que giran despacio
+  if(variant === 'lulu' || variant === 'miel'){
+    // Sol con rayos girando muy despacio (dorado más intenso en 'miel')
     const sx = W*0.8, sy = H*0.28;
     g.save();
     g.translate(sx, sy);
-    g.rotate(t*0.003);
-    g.fillStyle = 'rgba(255,214,120,0.10)';
+    g.rotate(t*0.0012);
+    g.fillStyle = variant==='miel' ? 'rgba(255,200,90,0.13)' : 'rgba(255,214,120,0.10)';
     for(let i=0;i<8;i++){
       g.rotate(Math.PI/4);
-      g.beginPath(); g.moveTo(0,0); g.lineTo(60,-9); g.lineTo(60,9); g.closePath(); g.fill();
+      g.beginPath(); g.moveTo(0,0); g.lineTo(62,-9); g.lineTo(62,9); g.closePath(); g.fill();
     }
     g.restore();
     g.fillStyle = 'rgba(255,220,140,0.35)';
     g.beginPath(); g.arc(sx, sy, 22, 0, Math.PI*2); g.fill();
     g.fillStyle = '#ffe9a8';
     g.beginPath(); g.arc(sx, sy, 14, 0, Math.PI*2); g.fill();
-    // Colinas
-    g.fillStyle = '#2c6a20';
+    g.fillStyle = variant==='miel' ? '#5c4614' : '#2c6a20';
     g.beginPath(); g.arc(W*0.2, H+18, 46, Math.PI, 0); g.fill();
     g.beginPath(); g.arc(W*0.75, H+24, 60, Math.PI, 0); g.fill();
-    g.fillStyle = '#255c1b';
+    g.fillStyle = variant==='miel' ? '#4e3a10' : '#255c1b';
     g.fillRect(0, H-13, W, 13);
   } else if(variant === 'turna'){
-    // Luna con halo que respira
     const mx = W*0.82, my = H*0.22;
-    g.fillStyle = 'rgba(216,196,255,' + (0.14 + 0.06*Math.sin(t*0.04)) + ')';
+    g.fillStyle = 'rgba(216,196,255,' + (0.14 + 0.05*Math.sin(t*0.016)) + ')';
     g.beginPath(); g.arc(mx, my, 30, 0, Math.PI*2); g.fill();
     g.fillStyle = '#e8dcff';
     g.beginPath(); g.arc(mx, my, 15, 0, Math.PI*2); g.fill();
     g.fillStyle = 'rgba(150,130,190,0.5)';
     g.beginPath(); g.arc(mx-5, my-3, 3, 0, Math.PI*2); g.arc(mx+4, my+5, 2.2, 0, Math.PI*2); g.fill();
-    // Niebla que se desliza
     for(let i=0;i<3;i++){
-      const fxx = ((t*0.25 + i*110) % (W+120)) - 60;
+      const fxx = ((t*0.12 + i*110) % (W+120)) - 60;
       g.fillStyle = 'rgba(170,140,210,0.08)';
       g.beginPath(); g.ellipse(fxx, H*0.78 + i*8, 70, 12, 0, 0, Math.PI*2); g.fill();
     }
     g.fillStyle = '#160a24';
     g.fillRect(0, H-13, W, 13);
   } else {
-    // Aurora ondulante
     for(let r=0;r<3;r++){
       g.fillStyle = 'rgba(' + (90+r*30) + ',255,' + (200-r*25) + ',0.07)';
       g.beginPath();
       const yb = 18 + r*16;
       for(let x=0;x<=W;x+=10){
-        const yy = yb + Math.sin(x*0.045 + t*0.025 + r*1.4)*8;
+        const yy = yb + Math.sin(x*0.045 + t*0.01 + r*1.4)*8;
         if(x===0) g.moveTo(x,yy); else g.lineTo(x,yy);
       }
       for(let x=W;x>=0;x-=10){
-        g.lineTo(x, yb + 12 + Math.sin(x*0.045 + t*0.025 + r*1.4)*8);
+        g.lineTo(x, yb + 12 + Math.sin(x*0.045 + t*0.01 + r*1.4)*8);
       }
       g.closePath(); g.fill();
     }
-    // Luciérnagas
     for(let i=0;i<8;i++){
-      const fxx = (i*43 + Math.sin(t*0.02+i)*14 + 20) % W;
-      const fy = H*0.45 + ((i*29 + t*0.2) % (H*0.4));
-      const fl = 0.4+0.6*Math.abs(Math.sin(t*0.06+i*2.1));
+      const fxx = (i*43 + Math.sin(t*0.008+i)*14 + 20) % W;
+      const fy = H*0.45 + ((i*29 + t*0.08) % (H*0.4));
+      const fl = 0.4+0.6*Math.abs(Math.sin(t*0.024+i*2.1));
       g.fillStyle = 'rgba(170,255,150,' + (0.5*fl) + ')';
       g.beginPath(); g.arc(fxx, fy, 1.4, 0, Math.PI*2); g.fill();
     }
@@ -11246,366 +11401,524 @@ function sceneBackdrop(st, variant){
   }
 }
 
-// Ojo grande y brilloso (estilo chibi) con parpadeo
-function qGlossyEye(g, x, y, r, blink, iris){
+// ═══ Helpers de retrato ═══
+const Q_OUT = 'rgba(48,30,24,0.35)';
+function qStroke(g){ g.strokeStyle = Q_OUT; g.lineWidth = 1.1; g.stroke(); }
+
+// Ojo grande estilo chibi: iris con gradiente, doble brillo, pestaña superior
+function qEye2(g, x, y, r, blink, light, dark, lashCol){
+  lashCol = lashCol || '#3a2418';
   if(blink){
-    g.strokeStyle = '#3a2418'; g.lineWidth = Math.max(1, r*0.45); g.lineCap = 'round';
-    g.beginPath(); g.moveTo(x-r, y); g.quadraticCurveTo(x, y+r*0.7, x+r, y); g.stroke();
+    g.strokeStyle = lashCol; g.lineWidth = Math.max(1, r*0.4); g.lineCap = 'round';
+    g.beginPath(); g.moveTo(x - r*0.9, y + r*0.1);
+    g.quadraticCurveTo(x, y + r*0.75, x + r*0.9, y + r*0.1); g.stroke();
     return;
   }
   g.fillStyle = '#fff';
-  g.beginPath(); g.ellipse(x, y, r, r*1.15, 0, 0, Math.PI*2); g.fill();
-  const ir = g.createRadialGradient(x, y+r*0.15, r*0.1, x, y+r*0.15, r*0.85);
-  ir.addColorStop(0, iris.light); ir.addColorStop(1, iris.dark);
+  g.beginPath(); g.ellipse(x, y, r, r*1.12, 0, 0, Math.PI*2); g.fill();
+  const ir = g.createRadialGradient(x, y + r*0.12, r*0.08, x, y + r*0.12, r*0.85);
+  ir.addColorStop(0, light); ir.addColorStop(1, dark);
   g.fillStyle = ir;
-  g.beginPath(); g.arc(x, y+r*0.15, r*0.78, 0, Math.PI*2); g.fill();
-  g.fillStyle = '#20140c';
-  g.beginPath(); g.arc(x, y+r*0.18, r*0.42, 0, Math.PI*2); g.fill();
+  g.beginPath(); g.arc(x, y + r*0.12, r*0.8, 0, Math.PI*2); g.fill();
+  g.fillStyle = '#1c110a';
+  g.beginPath(); g.arc(x, y + r*0.15, r*0.45, 0, Math.PI*2); g.fill();
   g.fillStyle = '#fff';
-  g.beginPath(); g.arc(x - r*0.28, y - r*0.18, r*0.24, 0, Math.PI*2); g.fill();
-  g.globalAlpha = 0.7;
-  g.beginPath(); g.arc(x + r*0.3, y + r*0.42, r*0.12, 0, Math.PI*2); g.fill();
+  g.beginPath(); g.arc(x - r*0.3, y - r*0.22, r*0.27, 0, Math.PI*2); g.fill();
+  g.globalAlpha = 0.75;
+  g.beginPath(); g.arc(x + r*0.28, y + r*0.4, r*0.13, 0, Math.PI*2); g.fill();
   g.globalAlpha = 1;
+  g.strokeStyle = lashCol; g.lineWidth = r*0.22; g.lineCap = 'round';
+  g.beginPath(); g.arc(x, y + r*0.05, r*1.02, Math.PI*1.15, Math.PI*1.85); g.stroke();
 }
 
-// ═══ REINA LULU — Bichón Maltés esponjosa con moño satinado ═══
-// Origen (0,0) = punto de apoyo en el piso; dibuja hacia arriba (y negativo).
+// Manto real que cae detrás del cuerpo
+function qMantle(g, top, bottom, trim){
+  const mg = g.createLinearGradient(0, -44, 0, 0);
+  mg.addColorStop(0, top); mg.addColorStop(1, bottom);
+  g.fillStyle = mg;
+  g.beginPath();
+  g.moveTo(-11, -38);
+  g.bezierCurveTo(-28, -33, -31, -12, -26, -0.5);
+  g.lineTo(26, -0.5);
+  g.bezierCurveTo(31, -12, 28, -33, 11, -38);
+  g.closePath();
+  g.fill();
+  qStroke(g);
+  g.fillStyle = trim;
+  g.beginPath();
+  g.roundRect(-24.5, -5.4, 49, 4.6, 2.2);
+  g.fill();
+}
+
+// Oreja caída que ENMARCA la cara (se dibuja después de la cabeza).
+// side: -1 izquierda / 1 derecha · ox: separación horizontal del centro.
+function qDropEar(g, side, c1, c2, sway, ox){
+  ox = ox || 8.8;
+  g.save();
+  g.translate(side*ox, -13.5);
+  g.rotate(side*(0.1 + sway*0.03));
+  const eg = g.createLinearGradient(0, 0, 0, 30);
+  eg.addColorStop(0, c1); eg.addColorStop(1, c2);
+  g.fillStyle = eg;
+  g.beginPath();
+  g.moveTo(0, 0);
+  g.bezierCurveTo(side*9.5, 1.5, side*10.5, 17, side*7, 27);
+  g.bezierCurveTo(side*5.2, 31.5, side*1.2, 30, side*0.8, 25);
+  g.bezierCurveTo(side*2.6, 12, side*1.8, 4, 0, 0);
+  g.closePath();
+  g.fill();
+  qStroke(g);
+  g.restore();
+}
+
+// ═══ REINA LULU — Bichón Maltés sedosa, moño satinado, tiara de perlas ═══
+// Origen (0,0) = apoyo en el piso; dibuja hacia arriba (y negativo).
 function drawQueenLulu(g, t){
-  const bob = Math.sin(t*0.05)*1.6;
-  const blink = (t % 190) < 7;
-  const wag = Math.sin(t*0.16)*0.35;
+  const bob = Math.sin(t*0.03)*1.1;               // respiración ~0.3Hz
+  const blink = (t % 300) < 8;                    // parpadeo cada ~5s
+  const sway = Math.sin(t*0.018);                 // vaivén muy lento
   g.save();
   g.translate(0, bob);
-  // Cola pluma (detrás) — abanico esponjoso que se menea
+  qMantle(g, '#f78fb5', '#c2447c', '#ffd9ea');
+  g.fillStyle = '#ffe084'; g.beginPath(); g.arc(0, -36, 2, 0, Math.PI*2); g.fill();
+  // Cola pluma asomando (ondeo suave)
   g.save();
-  g.translate(-22, -16);
-  g.rotate(wag*0.5);
-  const tailG = g.createRadialGradient(0,0,1, 0,0,12);
-  tailG.addColorStop(0,'#ffffff'); tailG.addColorStop(1,'#e3dcd6');
-  g.fillStyle = tailG;
-  for(let i=0;i<4;i++){
-    g.beginPath(); g.arc(-i*3, -i*2.6, 6.5-i*0.8, 0, Math.PI*2); g.fill();
-  }
+  g.translate(-23, -14);
+  g.rotate(sway*0.1 - 0.5);
+  g.fillStyle = '#f3ece6';
+  for(let i=0;i<4;i++){ g.beginPath(); g.arc(-i*3.2, -i*2, 6-i*0.7, 0, Math.PI*2); g.fill(); }
   g.restore();
-  // Orejas largas esponjosas (detrás de la cabeza)
-  const earSway = Math.sin(t*0.05+1)*1.2;
-  const earG = g.createLinearGradient(0,-46,0,-16);
-  earG.addColorStop(0,'#f4ede7'); earG.addColorStop(1,'#ddd2c9');
-  g.fillStyle = earG;
-  g.beginPath(); g.ellipse(-16, -32+earSway*0.4, 7.5, 13, -0.28, 0, Math.PI*2); g.fill();
-  g.beginPath(); g.ellipse(16, -32+earSway*0.4, 7.5, 13, 0.28, 0, Math.PI*2); g.fill();
-  // Cuerpo: nube con gradiente suave
-  const bodyG = g.createRadialGradient(-4,-20,4, 0,-14,30);
-  bodyG.addColorStop(0,'#ffffff'); bodyG.addColorStop(0.75,'#f6f1ec'); bodyG.addColorStop(1,'#ded4cc');
+  // Cuerpo
+  const bodyG = g.createRadialGradient(-5,-22,3, 0,-16,26);
+  bodyG.addColorStop(0,'#ffffff'); bodyG.addColorStop(0.7,'#f7f2ec'); bodyG.addColorStop(1,'#ddd2c8');
   g.fillStyle = bodyG;
-  g.beginPath(); g.ellipse(0, -14, 24, 14, 0, 0, Math.PI*2); g.fill();
-  // Rulos del pecho
-  for(let i=0;i<5;i++){
-    g.beginPath(); g.arc(-16+i*8, -4.5, 5, 0, Math.PI*2); g.fill();
-  }
-  // Patitas delanteras
-  g.fillStyle = '#efe8e2';
-  g.beginPath(); g.ellipse(-8, -1.8, 4.6, 3.2, 0, 0, Math.PI*2); g.fill();
-  g.beginPath(); g.ellipse(8, -1.8, 4.6, 3.2, 0, 0, Math.PI*2); g.fill();
-  // Cabeza redonda esponjosa
-  const headG = g.createRadialGradient(-4,-40,3, 0,-36,20);
-  headG.addColorStop(0,'#ffffff'); headG.addColorStop(0.8,'#f8f3ee'); headG.addColorStop(1,'#e2d8d0');
+  g.beginPath(); g.ellipse(0, -16, 18, 15, 0, 0, Math.PI*2); g.fill(); qStroke(g);
+  // Melena sedosa del pecho
+  g.fillStyle = '#fbf7f2';
+  g.beginPath();
+  g.arc(-9, -12, 6, 0, Math.PI*2); g.arc(0, -10, 6.6, 0, Math.PI*2); g.arc(9, -12, 6, 0, Math.PI*2);
+  g.arc(-5, -5, 5.4, 0, Math.PI*2); g.arc(5, -5, 5.4, 0, Math.PI*2);
+  g.fill();
+  // Patitas juntas
+  g.fillStyle = '#efe7e0';
+  g.beginPath(); g.ellipse(-6, -2, 4.4, 3, 0, 0, Math.PI*2); g.fill(); qStroke(g);
+  g.beginPath(); g.ellipse(6, -2, 4.4, 3, 0, 0, Math.PI*2); g.fill(); qStroke(g);
+  // Collar de perlas
+  g.fillStyle = '#fff';
+  for(let i=-2;i<=2;i++){ g.beginPath(); g.arc(i*4.6, -27 + Math.abs(i)*1.4, 1.8, 0, Math.PI*2); g.fill(); }
+  // ── Cabeza (cabeceo sutil) ──
+  g.save();
+  g.translate(0, -44);
+  g.rotate(sway*0.035);
+  // Cabeza
+  const headG = g.createRadialGradient(-5,-5,3, 0,0,19);
+  headG.addColorStop(0,'#ffffff'); headG.addColorStop(0.75,'#f8f3ee'); headG.addColorStop(1,'#e0d5cc');
   g.fillStyle = headG;
-  g.beginPath(); g.arc(0, -36, 17, 0, Math.PI*2); g.fill();
-  // Flequillo de rulos
+  g.beginPath(); g.arc(0, 0, 17, 0, Math.PI*2); g.fill(); qStroke(g);
+  // Orejas sedosas cayendo a los costados de la cara
+  qDropEar(g, -1, '#f2eae2', '#d6c9be', sway);
+  qDropEar(g, 1, '#f2eae2', '#d6c9be', sway);
+  // Flequillo sedoso
   g.fillStyle = '#ffffff';
   g.beginPath();
-  g.arc(-8, -50, 5.5, 0, Math.PI*2);
-  g.arc(0, -52.5, 6, 0, Math.PI*2);
-  g.arc(8, -50, 5.5, 0, Math.PI*2);
+  g.arc(-9, -13.5, 5.6, 0, Math.PI*2);
+  g.arc(0, -15.8, 6.4, 0, Math.PI*2);
+  g.arc(9, -13.5, 5.6, 0, Math.PI*2);
   g.fill();
-  // Mejillas rosadas
-  g.fillStyle = 'rgba(255,150,170,0.4)';
-  g.beginPath(); g.ellipse(-9.5, -31, 3.6, 2.4, 0, 0, Math.PI*2); g.fill();
-  g.beginPath(); g.ellipse(9.5, -31, 3.6, 2.4, 0, 0, Math.PI*2); g.fill();
-  // Ojos grandes y brillosos + pestañas
-  qGlossyEye(g, -6.5, -37, 4, blink, {light:'#8a6a4c', dark:'#3c281a'});
-  qGlossyEye(g, 6.5, -37, 4, blink, {light:'#8a6a4c', dark:'#3c281a'});
-  g.strokeStyle = '#3a2418'; g.lineWidth = 0.9; g.lineCap = 'round';
+  // Mejillas
+  g.fillStyle = 'rgba(255,148,170,0.38)';
+  g.beginPath(); g.ellipse(-9.6, 4.6, 3.6, 2.3, 0, 0, Math.PI*2); g.fill();
+  g.beginPath(); g.ellipse(9.6, 4.6, 3.6, 2.3, 0, 0, Math.PI*2); g.fill();
+  // Ojos
+  qEye2(g, -6.6, -1.5, 4.1, blink, '#a5764e', '#3f2a18');
+  qEye2(g, 6.6, -1.5, 4.1, blink, '#a5764e', '#3f2a18');
+  // Hocico + nariz + boquita
+  g.fillStyle = '#fdf9f4';
+  g.beginPath(); g.ellipse(0, 6.4, 5.8, 4.2, 0, 0, Math.PI*2); g.fill();
+  const nG = g.createRadialGradient(-0.6, 3.8, 0.3, 0, 4.2, 2.4);
+  nG.addColorStop(0,'#6d5b52'); nG.addColorStop(1,'#241a15');
+  g.fillStyle = nG;
+  g.beginPath(); g.ellipse(0, 4.2, 2.5, 1.9, 0, 0, Math.PI*2); g.fill();
+  g.fillStyle = 'rgba(255,255,255,0.8)';
+  g.beginPath(); g.arc(-0.8, 3.6, 0.6, 0, Math.PI*2); g.fill();
+  g.strokeStyle = '#5c4238'; g.lineWidth = 1; g.lineCap = 'round';
   g.beginPath();
-  g.moveTo(-10.6, -40); g.lineTo(-12.2, -41.4);
-  g.moveTo(10.6, -40); g.lineTo(12.2, -41.4);
+  g.moveTo(0, 5.9); g.quadraticCurveTo(0, 8, -2.5, 8.4);
+  g.moveTo(0, 5.9); g.quadraticCurveTo(0, 8, 2.5, 8.4);
   g.stroke();
-  // Hocico + nariz con brillo
-  g.fillStyle = '#fbf6f1';
-  g.beginPath(); g.ellipse(0, -29.5, 6, 4.4, 0, 0, Math.PI*2); g.fill();
-  const noseG = g.createRadialGradient(-0.6,-32.4,0.3, 0,-32,2.2);
-  noseG.addColorStop(0,'#6b5a52'); noseG.addColorStop(1,'#241a16');
-  g.fillStyle = noseG;
-  g.beginPath(); g.ellipse(0, -32, 2.6, 2, 0, 0, Math.PI*2); g.fill();
-  g.fillStyle = 'rgba(255,255,255,0.75)';
-  g.beginPath(); g.arc(-0.8, -32.6, 0.6, 0, Math.PI*2); g.fill();
-  // Sonrisa + lengüita
-  g.strokeStyle = '#5a4038'; g.lineWidth = 1;
-  g.beginPath();
-  g.moveTo(0, -30.4); g.quadraticCurveTo(0, -28.6, -2.4, -28.2);
-  g.moveTo(0, -30.4); g.quadraticCurveTo(0, -28.6, 2.4, -28.2);
-  g.stroke();
-  g.fillStyle = '#ff8fa0';
-  g.beginPath(); g.ellipse(0, -27.4, 1.7, 1.2, 0, 0, Math.PI*2); g.fill();
-  // Moño rosa satinado con rebote
+  // Moño satinado
   g.save();
-  g.translate(9, -51);
-  g.rotate(0.22 + wag*0.15);
-  const bowG = g.createLinearGradient(-8,0,8,0);
-  bowG.addColorStop(0,'#ff7fb0'); bowG.addColorStop(0.5,'#ff9cc4'); bowG.addColorStop(1,'#f0568e');
+  g.translate(10.5, -13.5);
+  g.rotate(0.25 + sway*0.04);
+  const bowG = g.createLinearGradient(-8, 0, 8, 0);
+  bowG.addColorStop(0,'#ff86b6'); bowG.addColorStop(0.5,'#ffa7cb'); bowG.addColorStop(1,'#ef5e95');
   g.fillStyle = bowG;
-  g.beginPath(); g.moveTo(0,0); g.quadraticCurveTo(-9,-6,-8,0); g.quadraticCurveTo(-9,6,0,0); g.fill();
-  g.beginPath(); g.moveTo(0,0); g.quadraticCurveTo(9,-6,8,0); g.quadraticCurveTo(9,6,0,0); g.fill();
-  g.fillStyle = '#e0447e';
-  g.beginPath(); g.arc(0, 0, 2.2, 0, Math.PI*2); g.fill();
-  g.fillStyle = 'rgba(255,255,255,0.6)';
-  g.beginPath(); g.arc(-0.7, -0.7, 0.8, 0, Math.PI*2); g.fill();
+  g.beginPath(); g.ellipse(-4.6, 0, 4.6, 3, -0.35, 0, Math.PI*2); g.fill();
+  g.beginPath(); g.ellipse(4.6, 0, 4.6, 3, 0.35, 0, Math.PI*2); g.fill();
+  qStroke(g);
+  g.fillStyle = '#e0447e'; g.beginPath(); g.arc(0, 0, 2.1, 0, Math.PI*2); g.fill();
   g.restore();
-  // Perlitas de tiara entre los rulos
-  g.fillStyle = '#ffe084';
+  // Tiara fina con perlas
+  g.strokeStyle = '#eec25a'; g.lineWidth = 1.6;
+  g.beginPath(); g.arc(0, -3, 15.6, Math.PI*1.28, Math.PI*1.72); g.stroke();
+  g.fillStyle = '#fff';
   g.beginPath();
-  g.arc(-6, -54, 1.4, 0, Math.PI*2);
-  g.arc(0, -56, 1.7, 0, Math.PI*2);
-  g.arc(6, -54, 1.4, 0, Math.PI*2);
+  g.arc(-5.5, -17.6, 1.3, 0, Math.PI*2);
+  g.arc(0, -18.8, 1.6, 0, Math.PI*2);
+  g.arc(5.5, -17.6, 1.3, 0, Math.PI*2);
   g.fill();
+  g.restore();
   g.restore();
 }
 
-// ═══ REINA TURNA — Bulldog Francés gótica con tiara violeta ═══
+// ═══ REINA TURNA — SALCHICHA con cara de BULLDOG FRANCÉS ═══
+// Cuerpo largo y bajito de salchicha + orejas de murciélago, hocico
+// chato con arrugas, pecho robusto. Manto y tiara violetas.
 function drawQueenTurna(g, t){
-  const bob = Math.sin(t*0.05)*1.4;
-  const blink = (t % 210) < 7;
-  const earTw = Math.sin(t*0.07)*0.06;
+  const bob = Math.sin(t*0.03 + 0.8)*1.1;
+  const blink = (t % 320) < 8;
+  const sway = Math.sin(t*0.016 + 1);
+  const earTw = Math.sin(t*0.012)*0.04;
   g.save();
   g.translate(0, bob);
-  // Orejas de murciélago grandes (detrás de la cabeza)
-  const earG = g.createLinearGradient(0,-60,0,-34);
-  earG.addColorStop(0,'#8d7f9e'); earG.addColorStop(1,'#a79ab5');
-  [[-12,-1],[12,1]].forEach(pair=>{
+  qMantle(g, '#9a63d8', '#5c2f96', '#e6d4ff');
+  g.fillStyle = '#ffe084'; g.beginPath(); g.arc(0, -34, 2, 0, Math.PI*2); g.fill();
+  // Colita de salchicha
+  g.save();
+  g.translate(-25, -8);
+  g.rotate(sway*0.1 - 0.35);
+  g.fillStyle = '#8c96ac';
+  g.beginPath(); g.ellipse(-4, 0, 7.5, 2.6, 0.35, 0, Math.PI*2); g.fill(); qStroke(g);
+  g.restore();
+  // CUERPO de salchicha: largo y bajo
+  const bodyG = g.createRadialGradient(-6,-18,3, 0,-13,30);
+  bodyG.addColorStop(0,'#b8c0d4'); bodyG.addColorStop(0.72,'#9aa4bc'); bodyG.addColorStop(1,'#6e7890');
+  g.fillStyle = bodyG;
+  g.beginPath();
+  g.moveTo(-24, -1);
+  g.bezierCurveTo(-26, -16, -14, -26, 0, -26.5);
+  g.bezierCurveTo(13, -27, 24, -18, 24, -1);
+  g.closePath();
+  g.fill(); qStroke(g);
+  // Pecho crema robusto (herencia frenchie)
+  g.fillStyle = '#f1ead9';
+  g.beginPath(); g.ellipse(0, -9, 12.5, 9.5, 0, 0, Math.PI*2); g.fill();
+  // Patitas cortas
+  g.fillStyle = '#828ca4';
+  g.beginPath(); g.ellipse(-7, -1.8, 4.6, 3, 0, 0, Math.PI*2); g.fill(); qStroke(g);
+  g.beginPath(); g.ellipse(7, -1.8, 4.6, 3, 0, 0, Math.PI*2); g.fill(); qStroke(g);
+  // ── Cabeza de frenchie ──
+  g.save();
+  g.translate(0, -42);
+  g.rotate(sway*0.03);
+  // Orejas de murciélago grandes y redondeadas
+  const earG = g.createLinearGradient(0, -22, 0, 6);
+  earG.addColorStop(0,'#79839c'); earG.addColorStop(1,'#98a2ba');
+  [[-11.5,-1],[11.5,1]].forEach(pair=>{
     const ex = pair[0], side = pair[1];
     g.save();
-    g.translate(ex, -44);
-    g.rotate(side*(0.22+earTw));
+    g.translate(ex, -10);
+    g.rotate(side*(0.16 + earTw));
     g.fillStyle = earG;
     g.beginPath();
-    g.moveTo(-6.4, 8);
-    g.quadraticCurveTo(-7.5, -9, 0, -13.5);
-    g.quadraticCurveTo(7.5, -9, 6.4, 8);
-    g.closePath(); g.fill();
-    g.fillStyle = 'rgba(255,170,190,0.75)';
+    g.moveTo(-7.6, 8);
+    g.bezierCurveTo(-9, -7, -5, -15, 0, -15.4);
+    g.bezierCurveTo(5, -15, 9, -7, 7.6, 8);
+    g.closePath();
+    g.fill(); qStroke(g);
+    g.fillStyle = 'rgba(255,178,196,0.8)';
     g.beginPath();
-    g.moveTo(-3.4, 6);
-    g.quadraticCurveTo(-4.2, -6, 0, -9.5);
-    g.quadraticCurveTo(4.2, -6, 3.4, 6);
-    g.closePath(); g.fill();
+    g.moveTo(-4, 5.6);
+    g.bezierCurveTo(-5, -5, -2.6, -10.6, 0, -11);
+    g.bezierCurveTo(2.6, -10.6, 5, -5, 4, 5.6);
+    g.closePath();
+    g.fill();
     g.restore();
   });
-  // Cuerpo compacto
-  const bodyG = g.createRadialGradient(-4,-16,3, 0,-13,26);
-  bodyG.addColorStop(0,'#c9c2d2'); bodyG.addColorStop(0.8,'#a79ab5'); bodyG.addColorStop(1,'#7d6f8e');
-  g.fillStyle = bodyG;
-  g.beginPath(); g.ellipse(0, -13, 20, 13, 0, 0, Math.PI*2); g.fill();
-  // Pecho claro
-  g.fillStyle = '#e9e3ef';
-  g.beginPath(); g.ellipse(0, -9, 11, 8.5, 0, 0, Math.PI*2); g.fill();
-  // Patitas
-  g.fillStyle = '#948aa4';
-  g.beginPath(); g.ellipse(-8, -1.8, 4.6, 3.2, 0, 0, Math.PI*2); g.fill();
-  g.beginPath(); g.ellipse(8, -1.8, 4.6, 3.2, 0, 0, Math.PI*2); g.fill();
-  // Cabeza ancha
-  const headG = g.createRadialGradient(-4,-38,3, 0,-34,20);
-  headG.addColorStop(0,'#cec7d8'); headG.addColorStop(0.8,'#aa9db8'); headG.addColorStop(1,'#84759a');
+  // Cabeza ancha mofletuda
+  const headG = g.createRadialGradient(-5,-4,3, 0,0,21);
+  headG.addColorStop(0,'#c3cbdd'); headG.addColorStop(0.72,'#a2acc2'); headG.addColorStop(1,'#78829a');
   g.fillStyle = headG;
-  g.beginPath(); g.ellipse(0, -34, 17.5, 15.5, 0, 0, Math.PI*2); g.fill();
-  // Parche oscuro sobre un ojo (marca de la casa)
-  g.fillStyle = 'rgba(70,58,88,0.55)';
-  g.beginPath(); g.ellipse(7.5, -38, 6.4, 7.2, 0.2, 0, Math.PI*2); g.fill();
+  g.beginPath(); g.ellipse(0, 0, 18, 15.8, 0, 0, Math.PI*2); g.fill(); qStroke(g);
+  // Parche atigrado sobre un ojo
+  g.fillStyle = 'rgba(84,92,116,0.5)';
+  g.beginPath(); g.ellipse(7.8, -4, 6.6, 7.4, 0.18, 0, Math.PI*2); g.fill();
   // Mejillas
-  g.fillStyle = 'rgba(255,140,170,0.32)';
-  g.beginPath(); g.ellipse(-10.5, -28.5, 3.6, 2.4, 0, 0, Math.PI*2); g.fill();
-  g.beginPath(); g.ellipse(10.5, -28.5, 3.6, 2.4, 0, 0, Math.PI*2); g.fill();
-  // Ojos enormes celestes + pestañas
-  qGlossyEye(g, -6.8, -35, 4.4, blink, {light:'#7ab0d8', dark:'#274a6e'});
-  qGlossyEye(g, 6.8, -35, 4.4, blink, {light:'#7ab0d8', dark:'#274a6e'});
-  g.strokeStyle = '#3a2c48'; g.lineWidth = 0.9; g.lineCap = 'round';
+  g.fillStyle = 'rgba(255,140,168,0.32)';
+  g.beginPath(); g.ellipse(-11, 5.4, 3.8, 2.4, 0, 0, Math.PI*2); g.fill();
+  g.beginPath(); g.ellipse(11, 5.4, 3.8, 2.4, 0, 0, Math.PI*2); g.fill();
+  // Ojos redondos bien separados
+  qEye2(g, -7.4, -1.4, 4.3, blink, '#86b6da', '#28486a', '#33284a');
+  qEye2(g, 7.4, -1.4, 4.3, blink, '#86b6da', '#28486a', '#33284a');
+  // Hocico chato ancho con arruga
+  g.fillStyle = '#bcc4d6';
+  g.beginPath(); g.ellipse(0, 7, 8, 5.2, 0, 0, Math.PI*2); g.fill(); qStroke(g);
+  g.strokeStyle = 'rgba(72,80,104,0.55)'; g.lineWidth = 1;
+  g.beginPath(); g.moveTo(-5, 3.4); g.quadraticCurveTo(0, 1.8, 5, 3.4); g.stroke();
+  // Nariz ancha y chata
+  const nG = g.createRadialGradient(-0.8, 4.4, 0.3, 0, 4.9, 2.8);
+  nG.addColorStop(0,'#5a4c6c'); nG.addColorStop(1,'#1c1428');
+  g.fillStyle = nG;
+  g.beginPath(); g.ellipse(0, 4.9, 3.2, 2, 0, 0, Math.PI*2); g.fill();
+  g.fillStyle = 'rgba(255,255,255,0.75)';
+  g.beginPath(); g.arc(-1, 4.3, 0.6, 0, Math.PI*2); g.fill();
+  // Boquita + dientecito asomando
+  g.strokeStyle = '#463a58'; g.lineWidth = 1; g.lineCap = 'round';
   g.beginPath();
-  g.moveTo(-11.2, -38.4); g.lineTo(-12.9, -39.8);
-  g.moveTo(11.2, -38.4); g.lineTo(12.9, -39.8);
+  g.moveTo(0, 6.6); g.quadraticCurveTo(0, 9, -2.8, 9.4);
+  g.moveTo(0, 6.6); g.quadraticCurveTo(0, 9, 2.8, 9.4);
   g.stroke();
-  // Hocico chato con arruguitas
-  g.fillStyle = '#c4bacf';
-  g.beginPath(); g.ellipse(0, -26.5, 7.2, 5, 0, 0, Math.PI*2); g.fill();
-  g.strokeStyle = 'rgba(80,66,96,0.5)'; g.lineWidth = 0.9;
-  g.beginPath();
-  g.moveTo(-4.5, -29.5); g.quadraticCurveTo(0, -31, 4.5, -29.5);
-  g.stroke();
-  // Nariz ancha con brillo
-  const noseG = g.createRadialGradient(-0.7,-29.3,0.3, 0,-29,2.6);
-  noseG.addColorStop(0,'#5c4c6a'); noseG.addColorStop(1,'#1e1428');
-  g.fillStyle = noseG;
-  g.beginPath(); g.ellipse(0, -29, 3, 2, 0, 0, Math.PI*2); g.fill();
-  g.fillStyle = 'rgba(255,255,255,0.7)';
-  g.beginPath(); g.arc(-0.9, -29.6, 0.6, 0, Math.PI*2); g.fill();
-  // Sonrisa con dientecito asomando
-  g.strokeStyle = '#4e3c5c'; g.lineWidth = 1;
-  g.beginPath();
-  g.moveTo(0, -27.4); g.quadraticCurveTo(0, -25.2, -3, -24.8);
-  g.moveTo(0, -27.4); g.quadraticCurveTo(0, -25.2, 3, -24.8);
-  g.stroke();
-  g.fillStyle = '#fff';
-  g.fillRect(-1.1, -25.2, 2.2, 1.7);
-  // Collar de perlas
-  g.fillStyle = '#f4eef8';
-  for(let i=-2;i<=2;i++){
-    g.beginPath(); g.arc(i*4.4, -16.5 + Math.abs(i)*1.1, 1.7, 0, Math.PI*2); g.fill();
-  }
-  g.fillStyle = 'rgba(255,255,255,0.8)';
-  for(let i=-2;i<=2;i++){
-    g.beginPath(); g.arc(i*4.4-0.5, -17 + Math.abs(i)*1.1, 0.5, 0, Math.PI*2); g.fill();
-  }
-  // Tiara violeta con gema que late
+  // Tiara violeta con gema que late despacio (más grande)
   g.save();
-  g.translate(0, -47);
-  const tiaraG = g.createLinearGradient(-10,0,10,0);
-  tiaraG.addColorStop(0,'#9a5ad8'); tiaraG.addColorStop(0.5,'#c894f4'); tiaraG.addColorStop(1,'#7e3cc0');
-  g.fillStyle = tiaraG;
+  g.translate(0, -15.5);
+  g.scale(1.25, 1.25);
+  const tG = g.createLinearGradient(-9, 0, 9, 0);
+  tG.addColorStop(0,'#a565e6'); tG.addColorStop(0.5,'#d3a6ff'); tG.addColorStop(1,'#8746c8');
+  g.fillStyle = tG;
   g.beginPath();
-  g.moveTo(-10, 2);
-  g.lineTo(-6.5, -4.5);
-  g.lineTo(-3, 0);
-  g.lineTo(0, -6.5);
-  g.lineTo(3, 0);
-  g.lineTo(6.5, -4.5);
-  g.lineTo(10, 2);
-  g.closePath(); g.fill();
-  const gem = 0.6 + 0.4*Math.sin(t*0.08);
-  g.fillStyle = '#ff6fd8';
-  g.beginPath(); g.arc(0, -2.6, 1.9, 0, Math.PI*2); g.fill();
-  g.fillStyle = 'rgba(255,255,255,' + (0.5*gem) + ')';
-  g.beginPath(); g.arc(-0.5, -3.1, 0.8, 0, Math.PI*2); g.fill();
+  g.moveTo(-9.5, 2.5);
+  g.lineTo(-6, -3.5);
+  g.lineTo(-2.8, 0.5);
+  g.lineTo(0, -5.5);
+  g.lineTo(2.8, 0.5);
+  g.lineTo(6, -3.5);
+  g.lineTo(9.5, 2.5);
+  g.closePath();
+  g.fill(); qStroke(g);
+  const gem = 0.5 + 0.5*Math.sin(t*0.05);
+  g.fillStyle = '#ff79dd';
+  g.beginPath(); g.arc(0, -1.4, 1.9, 0, Math.PI*2); g.fill();
+  g.fillStyle = 'rgba(255,255,255,' + (0.45*gem) + ')';
+  g.beginPath(); g.arc(-0.5, -1.9, 0.8, 0, Math.PI*2); g.fill();
+  g.restore();
   g.restore();
   g.restore();
 }
 
-// ═══ REINA BAMBY — Salchicha reina madre: lentes, capa real y corona ═══
+// ═══ REINA BAMBY — Salchicha reina madre: lentes, capa con armiño, corona ═══
 function drawQueenBamby(g, t){
-  const bob = Math.sin(t*0.045)*1.2;
-  const blink = (t % 230) < 8;
-  const glint = t % 240;
+  const bob = Math.sin(t*0.027 + 1.6)*1.0;
+  const blink = (t % 340) < 9;
+  const sway = Math.sin(t*0.015 + 2);
+  const glint = t % 420;
   g.save();
   g.translate(0, bob);
-  // Capa real roja con borde de armiño
-  const capeG = g.createLinearGradient(0,-40,0,0);
-  capeG.addColorStop(0,'#c22540'); capeG.addColorStop(1,'#7e1428');
-  g.fillStyle = capeG;
-  g.beginPath();
-  g.moveTo(-15, -38);
-  g.quadraticCurveTo(-30, -22, -26, 0);
-  g.lineTo(26, 0);
-  g.quadraticCurveTo(30, -22, 15, -38);
-  g.closePath(); g.fill();
-  g.fillStyle = '#f6f1e8';
-  g.fillRect(-26, -4.5, 52, 4.5);
+  qMantle(g, '#cf2c48', '#801528', '#f6f0e4');
   g.fillStyle = '#3a3a3a';
-  for(let i=-2;i<=2;i++){ g.fillRect(i*9-0.8, -3.4, 1.6, 1.6); }
-  // Orejas largas caídas con mechón canoso (detrás)
-  const earSway = Math.sin(t*0.045+1.1);
-  const earG = g.createLinearGradient(0,-46,0,-20);
-  earG.addColorStop(0,'#7e5630'); earG.addColorStop(1,'#5e3c1e');
-  g.fillStyle = earG;
-  g.beginPath(); g.ellipse(-14, -30+earSway*0.4, 6, 11.5, -0.22, 0, Math.PI*2); g.fill();
-  g.beginPath(); g.ellipse(14, -30+earSway*0.4, 6, 11.5, 0.22, 0, Math.PI*2); g.fill();
-  g.fillStyle = 'rgba(232,214,188,0.5)';
-  g.beginPath(); g.ellipse(-14, -36, 2.6, 3.6, -0.22, 0, Math.PI*2); g.fill();
-  // Cuerpo largo castaño
-  const bodyG = g.createRadialGradient(-4,-14,3, 0,-12,24);
-  bodyG.addColorStop(0,'#c08a58'); bodyG.addColorStop(0.8,'#9c6a3c'); bodyG.addColorStop(1,'#6e4826');
+  for(let i=-2;i<=2;i++){ g.fillRect(i*9 - 0.8, -4.2, 1.6, 2.4); }
+  g.fillStyle = '#ffe084'; g.beginPath(); g.arc(0, -35, 2.2, 0, Math.PI*2); g.fill();
+  // Bastón elegante
+  g.strokeStyle = '#8a5c2c'; g.lineWidth = 2; g.lineCap = 'round';
+  g.beginPath(); g.moveTo(-27, -1); g.lineTo(-29, -26); g.stroke();
+  g.beginPath(); g.arc(-26.5, -27.5, 3, Math.PI*0.9, Math.PI*1.9); g.stroke();
+  g.fillStyle = '#ffe084'; g.beginPath(); g.arc(-29.6, -26.8, 1.4, 0, Math.PI*2); g.fill();
+  // Cuerpo castaño
+  const bodyG = g.createRadialGradient(-5,-20,3, 0,-15,26);
+  bodyG.addColorStop(0,'#c6935f'); bodyG.addColorStop(0.75,'#9c6a3c'); bodyG.addColorStop(1,'#6b4523');
   g.fillStyle = bodyG;
-  g.beginPath(); g.ellipse(0, -12, 21, 12, 0, 0, Math.PI*2); g.fill();
+  g.beginPath(); g.ellipse(0, -15, 19, 14, 0, 0, Math.PI*2); g.fill(); qStroke(g);
   // Pecho canoso
-  g.fillStyle = '#e8d6bc';
-  g.beginPath(); g.ellipse(0, -8, 11, 7.5, 0, 0, Math.PI*2); g.fill();
+  g.fillStyle = '#ecd9bd';
+  g.beginPath(); g.ellipse(0, -9, 11.5, 8, 0, 0, Math.PI*2); g.fill();
   // Patitas
-  g.fillStyle = '#7e5630';
-  g.beginPath(); g.ellipse(-8, -1.6, 4.4, 3, 0, 0, Math.PI*2); g.fill();
-  g.beginPath(); g.ellipse(8, -1.6, 4.4, 3, 0, 0, Math.PI*2); g.fill();
+  g.fillStyle = '#7c5730';
+  g.beginPath(); g.ellipse(-7, -1.8, 4.4, 3, 0, 0, Math.PI*2); g.fill(); qStroke(g);
+  g.beginPath(); g.ellipse(7, -1.8, 4.4, 3, 0, 0, Math.PI*2); g.fill(); qStroke(g);
+  // ── Cabeza ──
+  g.save();
+  g.translate(0, -42);
+  g.rotate(sway*0.025);
   // Cabeza
-  const headG = g.createRadialGradient(-4,-37,3, 0,-34,18);
-  headG.addColorStop(0,'#c28e5c'); headG.addColorStop(0.8,'#a06e3e'); headG.addColorStop(1,'#7a5028');
+  const headG = g.createRadialGradient(-5,-4,3, 0,0,19);
+  headG.addColorStop(0,'#cf9c68'); headG.addColorStop(0.75,'#a87342'); headG.addColorStop(1,'#7c5228');
   g.fillStyle = headG;
-  g.beginPath(); g.arc(0, -34, 16, 0, Math.PI*2); g.fill();
-  // Hocico canoso (la edad, con dignidad)
-  g.fillStyle = '#e6d2b4';
-  g.beginPath(); g.ellipse(0, -27, 8.5, 5.6, 0, 0, Math.PI*2); g.fill();
-  // Cejas canosas
-  g.strokeStyle = '#eadfc8'; g.lineWidth = 1.6; g.lineCap = 'round';
+  g.beginPath(); g.arc(0, 0, 16.5, 0, Math.PI*2); g.fill(); qStroke(g);
+  // Orejas caídas enmarcando la cara + mechón canoso
+  qDropEar(g, -1, '#8a5f34', '#5c3a1c', sway, 9.2);
+  qDropEar(g, 1, '#8a5f34', '#5c3a1c', sway, 9.2);
+  g.fillStyle = 'rgba(236,217,189,0.5)';
+  g.beginPath(); g.ellipse(-12, -9, 2.2, 3.2, -0.35, 0, Math.PI*2); g.fill();
+  // Hocico canoso (edad con dignidad)
+  g.fillStyle = '#dfc49b';
+  g.beginPath(); g.ellipse(0, 8, 7.6, 5.2, 0, 0, Math.PI*2); g.fill(); qStroke(g);
+  // Cejas canosas pobladas
+  g.strokeStyle = '#efe4cc'; g.lineWidth = 2; g.lineCap = 'round';
   g.beginPath();
-  g.moveTo(-9.5, -41.5); g.quadraticCurveTo(-6.5, -43, -3.8, -41.8);
-  g.moveTo(3.8, -41.8); g.quadraticCurveTo(6.5, -43, 9.5, -41.5);
+  g.moveTo(-9.6, -7.4); g.quadraticCurveTo(-6.4, -9, -3.6, -7.7);
+  g.moveTo(3.6, -7.7); g.quadraticCurveTo(6.4, -9, 9.6, -7.4);
   g.stroke();
-  // Ojos amables detrás de lentes dorados
-  qGlossyEye(g, -6, -36.5, 3.4, blink, {light:'#9a7450', dark:'#41291a'});
-  qGlossyEye(g, 6, -36.5, 3.4, blink, {light:'#9a7450', dark:'#41291a'});
-  g.strokeStyle = '#e8bf68'; g.lineWidth = 1.4;
-  g.beginPath(); g.arc(-6, -36.5, 5.4, 0, Math.PI*2); g.stroke();
-  g.beginPath(); g.arc(6, -36.5, 5.4, 0, Math.PI*2); g.stroke();
-  g.beginPath(); g.moveTo(-0.8, -36.5); g.lineTo(0.8, -36.5); g.stroke();
-  g.beginPath(); g.moveTo(-11.2, -37.5); g.lineTo(-14.5, -39); g.stroke();
-  g.beginPath(); g.moveTo(11.2, -37.5); g.lineTo(14.5, -39); g.stroke();
-  // Destello que cruza el cristal cada tanto
-  if(glint < 40){
-    const gp = glint/40;
+  // Ojos amables
+  qEye2(g, -5.8, -2.4, 3.5, blink, '#a37a52', '#432b1a');
+  qEye2(g, 5.8, -2.4, 3.5, blink, '#a37a52', '#432b1a');
+  // Lentes dorados redondos
+  g.strokeStyle = '#e6bd60'; g.lineWidth = 1.5;
+  g.beginPath(); g.arc(-5.8, -2.4, 5.6, 0, Math.PI*2); g.stroke();
+  g.beginPath(); g.arc(5.8, -2.4, 5.6, 0, Math.PI*2); g.stroke();
+  g.beginPath(); g.moveTo(-0.6, -2.4); g.lineTo(0.6, -2.4); g.stroke();
+  g.beginPath(); g.moveTo(-11.2, -3.4); g.lineTo(-14.8, -5); g.stroke();
+  g.beginPath(); g.moveTo(11.2, -3.4); g.lineTo(14.8, -5); g.stroke();
+  // Destello del cristal (lento, cada 7s)
+  if(glint < 50){
+    const gp = glint/50;
     g.save();
-    g.globalAlpha = 0.55 * Math.sin(gp*Math.PI);
+    g.globalAlpha = 0.5 * Math.sin(gp*Math.PI);
     g.strokeStyle = '#fff'; g.lineWidth = 1.4;
     g.beginPath();
-    g.moveTo(-9+gp*6, -40.5); g.lineTo(-6+gp*6, -33);
+    g.moveTo(-9 + gp*7, -6.6); g.lineTo(-6 + gp*7, 1.2);
     g.stroke();
     g.restore();
   }
   // Nariz
-  const noseG = g.createRadialGradient(-0.6,-30.9,0.3, 0,-30.6,2.2);
-  noseG.addColorStop(0,'#6b5a52'); noseG.addColorStop(1,'#241a16');
-  g.fillStyle = noseG;
-  g.beginPath(); g.ellipse(0, -30.6, 2.4, 1.8, 0, 0, Math.PI*2); g.fill();
-  g.fillStyle = 'rgba(255,255,255,0.7)';
-  g.beginPath(); g.arc(-0.7, -31.1, 0.5, 0, Math.PI*2); g.fill();
+  const nG = g.createRadialGradient(-0.6, 4.2, 0.3, 0, 4.6, 2.3);
+  nG.addColorStop(0,'#6b5a52'); nG.addColorStop(1,'#241a15');
+  g.fillStyle = nG;
+  g.beginPath(); g.ellipse(0, 4.6, 2.5, 1.9, 0, 0, Math.PI*2); g.fill();
+  g.fillStyle = 'rgba(255,255,255,0.75)';
+  g.beginPath(); g.arc(-0.8, 4, 0.5, 0, Math.PI*2); g.fill();
   // Sonrisa serena
-  g.strokeStyle = '#5e3c22'; g.lineWidth = 1;
+  g.strokeStyle = '#5e3c22'; g.lineWidth = 1; g.lineCap = 'round';
   g.beginPath();
-  g.moveTo(0, -28.8); g.quadraticCurveTo(0, -26.4, -3, -26);
-  g.moveTo(0, -28.8); g.quadraticCurveTo(0, -26.4, 3, -26);
+  g.moveTo(0, 6.2); g.quadraticCurveTo(0, 8.6, -2.8, 9);
+  g.moveTo(0, 6.2); g.quadraticCurveTo(0, 8.6, 2.8, 9);
   g.stroke();
   // Mejillas suaves
   g.fillStyle = 'rgba(255,150,150,0.25)';
-  g.beginPath(); g.ellipse(-10, -30, 3.2, 2.2, 0, 0, Math.PI*2); g.fill();
-  g.beginPath(); g.ellipse(10, -30, 3.2, 2.2, 0, 0, Math.PI*2); g.fill();
-  // Corona dorada de reina madre con gemas titilantes
+  g.beginPath(); g.ellipse(-10.4, 4.4, 3.2, 2.2, 0, 0, Math.PI*2); g.fill();
+  g.beginPath(); g.ellipse(10.4, 4.4, 3.2, 2.2, 0, 0, Math.PI*2); g.fill();
+  // Corona dorada con gemas que titilan despacio
   g.save();
-  g.translate(0, -49);
-  const crownG = g.createLinearGradient(-12,0,12,0);
-  crownG.addColorStop(0,'#d9a72a'); crownG.addColorStop(0.5,'#ffe084'); crownG.addColorStop(1,'#c08c1c');
-  g.fillStyle = crownG;
+  g.translate(0, -15.5);
+  const cG = g.createLinearGradient(-12, 0, 12, 0);
+  cG.addColorStop(0,'#d9a72a'); cG.addColorStop(0.5,'#ffe084'); cG.addColorStop(1,'#c08c1c');
+  g.fillStyle = cG;
   g.beginPath();
-  g.moveTo(-12, 4.5);
-  g.lineTo(-11.5, -3.5);
-  g.lineTo(-6.6, 0);
-  g.lineTo(-3.6, -6);
+  g.moveTo(-11.5, 4);
+  g.lineTo(-11, -3.5);
+  g.lineTo(-6.3, 0);
+  g.lineTo(-3.4, -5.8);
   g.lineTo(0, -1.5);
-  g.lineTo(3.6, -6);
-  g.lineTo(6.6, 0);
-  g.lineTo(11.5, -3.5);
-  g.lineTo(12, 4.5);
-  g.closePath(); g.fill();
+  g.lineTo(3.4, -5.8);
+  g.lineTo(6.3, 0);
+  g.lineTo(11, -3.5);
+  g.lineTo(11.5, 4);
+  g.closePath();
+  g.fill(); qStroke(g);
   g.fillStyle = '#b07f18';
-  g.fillRect(-12, 3, 24, 2.6);
-  const tw2 = 0.5+0.5*Math.sin(t*0.09);
-  g.fillStyle = '#ff4f7e'; g.beginPath(); g.arc(-7.5, -0.5, 1.5, 0, Math.PI*2); g.fill();
-  g.fillStyle = '#4fd8ff'; g.beginPath(); g.arc(0, -1.2, 1.7, 0, Math.PI*2); g.fill();
-  g.fillStyle = '#59e87e'; g.beginPath(); g.arc(7.5, -0.5, 1.5, 0, Math.PI*2); g.fill();
-  g.fillStyle = 'rgba(255,255,255,' + (0.6*tw2) + ')';
-  g.beginPath(); g.arc(-0.4, -1.7, 0.7, 0, Math.PI*2); g.fill();
+  g.fillRect(-11.5, 2.8, 23, 2.4);
+  const tw2 = 0.5 + 0.5*Math.sin(t*0.045);
+  g.fillStyle = '#ff4f7e'; g.beginPath(); g.arc(-7.2, -0.4, 1.5, 0, Math.PI*2); g.fill();
+  g.fillStyle = '#4fd8ff'; g.beginPath(); g.arc(0, -1.1, 1.7, 0, Math.PI*2); g.fill();
+  g.fillStyle = '#59e87e'; g.beginPath(); g.arc(7.2, -0.4, 1.5, 0, Math.PI*2); g.fill();
+  g.fillStyle = 'rgba(255,255,255,' + (0.55*tw2) + ')';
+  g.beginPath(); g.arc(-0.4, -1.6, 0.7, 0, Math.PI*2); g.fill();
+  g.restore();
+  g.restore();
+  g.restore();
+}
+
+// ═══ PRINCESA MIEL — Salchicha dorada de pelo largo, tiara de flores ═══
+function drawQueenMiel(g, t){
+  const bob = Math.sin(t*0.032 + 2.4)*1.2;
+  const blink = (t % 260) < 7;
+  const sway = Math.sin(t*0.019 + 0.5);
+  g.save();
+  g.translate(0, bob);
+  qMantle(g, '#ffcf7d', '#d8973a', '#fff3d8');
+  g.fillStyle = '#ff8fb0'; g.beginPath(); g.arc(0, -34, 2, 0, Math.PI*2); g.fill();
+  // Colita dorada con pelo largo
+  g.save();
+  g.translate(-23, -9);
+  g.rotate(sway*0.12 - 0.45);
+  g.fillStyle = '#eec278';
+  for(let i=0;i<3;i++){ g.beginPath(); g.arc(-i*3.4, -i*2.2, 5.6-i*0.9, 0, Math.PI*2); g.fill(); }
+  g.restore();
+  // Cuerpo de salchicha esbelto
+  const bodyG = g.createRadialGradient(-6,-17,3, 0,-13,28);
+  bodyG.addColorStop(0,'#f4c987'); bodyG.addColorStop(0.72,'#dda75c'); bodyG.addColorStop(1,'#b07f3a');
+  g.fillStyle = bodyG;
+  g.beginPath();
+  g.moveTo(-22, -1);
+  g.bezierCurveTo(-24, -15, -12, -25, 0, -25.5);
+  g.bezierCurveTo(12, -26, 22, -16, 22, -1);
+  g.closePath();
+  g.fill(); qStroke(g);
+  // Pelo largo ondulado del lomo
+  g.fillStyle = '#f2cf92';
+  g.beginPath();
+  g.arc(-13, -20, 4.6, 0, Math.PI*2);
+  g.arc(-4, -23, 5, 0, Math.PI*2);
+  g.arc(5, -23, 5, 0, Math.PI*2);
+  g.arc(13, -19, 4.6, 0, Math.PI*2);
+  g.fill();
+  // Pecho crema
+  g.fillStyle = '#fdeecb';
+  g.beginPath(); g.ellipse(0, -9, 11, 8.6, 0, 0, Math.PI*2); g.fill();
+  // Patitas
+  g.fillStyle = '#b58444';
+  g.beginPath(); g.ellipse(-6.5, -1.8, 4.3, 3, 0, 0, Math.PI*2); g.fill(); qStroke(g);
+  g.beginPath(); g.ellipse(6.5, -1.8, 4.3, 3, 0, 0, Math.PI*2); g.fill(); qStroke(g);
+  // ── Cabeza ──
+  g.save();
+  g.translate(0, -41);
+  g.rotate(sway*0.035);
+  // Cabeza dorada
+  const headG = g.createRadialGradient(-5,-4,3, 0,0,18.5);
+  headG.addColorStop(0,'#f0c184'); headG.addColorStop(0.75,'#d9a457'); headG.addColorStop(1,'#a8763a');
+  g.fillStyle = headG;
+  g.beginPath(); g.arc(0, 0, 16, 0, Math.PI*2); g.fill(); qStroke(g);
+  // Orejas largas de pelo ondulado enmarcando la cara
+  qDropEar(g, -1, '#dca050', '#b0782c', sway);
+  qDropEar(g, 1, '#dca050', '#b0782c', sway);
+  g.fillStyle = '#e8b768';
+  g.beginPath(); g.ellipse(-14.5, 15.5, 3, 4.6, -0.25, 0, Math.PI*2); g.fill();
+  g.beginPath(); g.ellipse(14.5, 15.5, 3, 4.6, 0.25, 0, Math.PI*2); g.fill();
+  // Flequillo con mechón al costado
+  g.fillStyle = '#f7d79c';
+  g.beginPath();
+  g.arc(-7.6, -12.4, 5.2, 0, Math.PI*2);
+  g.arc(1.5, -14.4, 5.8, 0, Math.PI*2);
+  g.arc(9.4, -11.4, 4.6, 0, Math.PI*2);
+  g.fill();
+  // Mejillas
+  g.fillStyle = 'rgba(255,150,150,0.4)';
+  g.beginPath(); g.ellipse(-9.4, 4.6, 3.5, 2.3, 0, 0, Math.PI*2); g.fill();
+  g.beginPath(); g.ellipse(9.4, 4.6, 3.5, 2.3, 0, 0, Math.PI*2); g.fill();
+  // Ojos color miel grandes
+  qEye2(g, -6.2, -1.6, 4.2, blink, '#d9a253', '#6b3f16');
+  qEye2(g, 6.2, -1.6, 4.2, blink, '#d9a253', '#6b3f16');
+  // Hocico fino
+  g.fillStyle = '#f7e3bd';
+  g.beginPath(); g.ellipse(0, 6.6, 6.4, 4.4, 0, 0, Math.PI*2); g.fill();
+  const nG = g.createRadialGradient(-0.6, 4, 0.3, 0, 4.4, 2.2);
+  nG.addColorStop(0,'#59371c'); nG.addColorStop(1,'#241408');
+  g.fillStyle = nG;
+  g.beginPath(); g.ellipse(0, 4.4, 2.4, 1.8, 0, 0, Math.PI*2); g.fill();
+  g.fillStyle = 'rgba(255,255,255,0.8)';
+  g.beginPath(); g.arc(-0.7, 3.8, 0.55, 0, Math.PI*2); g.fill();
+  // Sonrisa + lengüita
+  g.strokeStyle = '#6b4522'; g.lineWidth = 1; g.lineCap = 'round';
+  g.beginPath();
+  g.moveTo(0, 6); g.quadraticCurveTo(0, 8.2, -2.6, 8.6);
+  g.moveTo(0, 6); g.quadraticCurveTo(0, 8.2, 2.6, 8.6);
+  g.stroke();
+  g.fillStyle = '#ff9caa';
+  g.beginPath(); g.ellipse(0, 9.2, 1.6, 1.1, 0, 0, Math.PI*2); g.fill();
+  // TIARA DE FLORES (rosas con centro dorado)
+  const flowers = [[-9.5, -12.2], [0, -16], [9.5, -12.2]];
+  for(const fpos of flowers){
+    const fx = fpos[0], fy = fpos[1];
+    g.fillStyle = '#ff8fb0';
+    for(let p=0; p<5; p++){
+      const a = p*(Math.PI*2/5) - Math.PI/2;
+      g.beginPath(); g.arc(fx + Math.cos(a)*2.2, fy + Math.sin(a)*2.2, 1.7, 0, Math.PI*2); g.fill();
+    }
+    g.fillStyle = '#ffe084';
+    g.beginPath(); g.arc(fx, fy, 1.4, 0, Math.PI*2); g.fill();
+  }
+  // Hojitas entre flores
+  g.fillStyle = '#7ec46a';
+  g.beginPath(); g.ellipse(-4.8, -14.6, 1.8, 0.9, -0.5, 0, Math.PI*2); g.fill();
+  g.beginPath(); g.ellipse(4.8, -14.6, 1.8, 0.9, 0.5, 0, Math.PI*2); g.fill();
   g.restore();
   g.restore();
 }
@@ -11613,23 +11926,24 @@ function drawQueenBamby(g, t){
 function drawQueen(g, variant, t){
   if(variant === 'turna') drawQueenTurna(g, t);
   else if(variant === 'bamby') drawQueenBamby(g, t);
+  else if(variant === 'miel') drawQueenMiel(g, t);
   else drawQueenLulu(g, t);
 }
 
-// Héroe en miniatura festejando (saltitos + cola contenta + lengua afuera)
+// Héroe en miniatura festejando (calmo: saltitos suaves)
 function drawHeroMini(g, t){
   const isDob = chosenChar === 'doverman';
-  const bob = Math.sin(t*0.05 + 1.4)*1.4;
-  const hop = Math.max(0, Math.sin(t*0.11)) * 3;
+  const bob = Math.sin(t*0.03 + 1.4)*1.2;
+  const hop = Math.max(0, Math.sin(t*0.055)) * 2.5;
   const body = isDob ? '#22222a' : '#b86830';
   const dark = isDob ? '#101018' : '#7a3c10';
   const belly = isDob ? '#8a5a30' : '#e8b870';
   g.save();
   g.translate(0, bob - hop);
-  // Cola contenta
+  // Cola contenta (más pausada)
   g.save();
   g.translate(-14, -12);
-  g.rotate(Math.sin(t*0.3)*0.5 - 0.4);
+  g.rotate(Math.sin(t*0.12)*0.35 - 0.4);
   g.fillStyle = body;
   g.beginPath(); g.ellipse(-3, 0, 7, 2.6, 0.5, 0, Math.PI*2); g.fill();
   g.restore();
@@ -11637,16 +11951,16 @@ function drawHeroMini(g, t){
   const bg2 = g.createRadialGradient(-3,-10,2, 0,-8,18);
   bg2.addColorStop(0, isDob ? '#34343e' : '#c87c40'); bg2.addColorStop(1, body);
   g.fillStyle = bg2;
-  g.beginPath(); g.ellipse(0, -8, 15, 8, 0, 0, Math.PI*2); g.fill();
+  g.beginPath(); g.ellipse(0, -8, 15, 8, 0, 0, Math.PI*2); g.fill(); qStroke(g);
   g.fillStyle = belly;
   g.beginPath(); g.ellipse(0, -5, 9, 4.2, 0, 0, Math.PI*2); g.fill();
   // Patitas
   g.fillStyle = dark;
   g.beginPath(); g.ellipse(-6, -0.8, 3.2, 2.4, 0, 0, Math.PI*2); g.fill();
   g.beginPath(); g.ellipse(6, -0.8, 3.2, 2.4, 0, 0, Math.PI*2); g.fill();
-  // Cabeza mirando a la derecha (hacia la reina)
+  // Cabeza mirando a la derecha
   g.fillStyle = body;
-  g.beginPath(); g.arc(8, -20, 9.5, 0, Math.PI*2); g.fill();
+  g.beginPath(); g.arc(8, -20, 9.5, 0, Math.PI*2); g.fill(); qStroke(g);
   // Hocico y nariz
   g.fillStyle = isDob ? '#101018' : '#a0561e';
   g.beginPath(); g.ellipse(14.5, -17.5, 4.6, 3.2, 0.15, 0, Math.PI*2); g.fill();
@@ -11660,7 +11974,7 @@ function drawHeroMini(g, t){
   } else {
     g.beginPath(); g.ellipse(3.4, -22, 3.2, 6, 0.15, 0, Math.PI*2); g.fill();
   }
-  // Ojo feliz (cerrado de alegría ∪)
+  // Ojo feliz (cerrado sonriendo)
   g.strokeStyle = '#0e0a08'; g.lineWidth = 1.3; g.lineCap = 'round';
   g.beginPath(); g.arc(9.4, -21.6, 2.2, Math.PI*1.15, Math.PI*1.85); g.stroke();
   // Lengua afuera
@@ -11669,60 +11983,62 @@ function drawHeroMini(g, t){
   g.restore();
 }
 
-// ═══ ESCENA: rescate de fin de mundo (héroe + reina + fuegos) ═══
+// ═══ ESCENA: rescate de fin de mundo ═══
 function startPrincessRescueScene(variant){
-  const accent = variant === 'turna' ? '#c792ff' : variant === 'bamby' ? '#ffd34d' : '#ff8fb0';
+  const accent = variant === 'turna' ? '#c792ff'
+              : variant === 'bamby' ? '#ffd34d'
+              : variant === 'miel' ? '#ffc46e'
+              : '#ff8fb0';
   startSceneAnim('princess-final', (st)=>{
     const g = st.g, W = st.W, H = st.H, t = st.t;
     sceneBackdrop(st, variant);
-    // Fuegos artificiales periódicos
-    if(t === 10 || (t > 10 && t % 52 === 0)){
+    // Fuegos artificiales periódicos (pausados)
+    if(t === 12 || (t > 12 && t % 64 === 0)){
       sceneSpawnFirework(st, 20 + Math.random()*(W-40), 18 + Math.random()*(H*0.4));
     }
     sceneUpdateDrawFireworks(st);
     // Sombras
     g.fillStyle = 'rgba(0,0,0,0.35)';
-    g.beginPath(); g.ellipse(W*0.32, H-8, 20, 3.6, 0, 0, Math.PI*2); g.fill();
+    g.beginPath(); g.ellipse(W*0.3, H-8, 20, 3.6, 0, 0, Math.PI*2); g.fill();
     g.beginPath(); g.ellipse(W*0.68, H-8, 28, 4.5, 0, 0, Math.PI*2); g.fill();
-    // Héroe festejando y reina rescatada
-    g.save(); g.translate(W*0.32, H-9); g.scale(1.15, 1.15); drawHeroMini(g, t); g.restore();
-    g.save(); g.translate(W*0.68, H-9); g.scale(1.5, 1.5); drawQueen(g, variant, t); g.restore();
-    // Corazón que late entre los dos
-    const beat = t % 100;
-    if(beat < 55){
-      const k = Math.sin((beat/55)*Math.PI);
+    // Héroe y reina
+    g.save(); g.translate(W*0.3, H-9); g.scale(1.1, 1.1); drawHeroMini(g, t); g.restore();
+    g.save(); g.translate(W*0.68, H-9); g.scale(1.35, 1.35); drawQueen(g, variant, t); g.restore();
+    // Corazón que late entre los dos (ciclo lento)
+    const beat = t % 150;
+    if(beat < 80){
+      const k = Math.sin((beat/80)*Math.PI);
       g.globalAlpha = k;
-      sceneHeart(g, W*0.5, H*0.42 - k*8, 4 + k*2.5, accent);
+      sceneHeart(g, W*0.49, H*0.42 - k*7, 4 + k*2, accent);
       g.globalAlpha = 1;
     }
-    // Corazones flotantes + destellos alrededor de la corona
     sceneUpdateDrawHearts(st, accent);
-    if(t % 30 < 16){
-      sceneSparkle(g, W*0.68 + Math.sin(t*0.1)*26, H-9 - 86 + Math.cos(t*0.13)*10,
-        3.2, 0.5 + 0.5*Math.sin(t*0.2), '#fff2b0');
+    // Destello ocasional sobre la corona
+    if(t % 90 < 40){
+      const k = Math.sin(((t % 90)/40)*Math.PI);
+      sceneSparkle(g, W*0.68 + 18, H-9 - 82, 3.4, 0.7*k, '#fff2b0');
     }
   });
 }
 
-// ═══ ESCENA: victoria final — las tres reinas + confeti ═══
+// ═══ ESCENA: victoria final — las CUATRO reinas + confeti ═══
 function startTrioFinal(){
   startSceneAnim('trio-final', (st)=>{
     const g = st.g, W = st.W, H = st.H, t = st.t;
     sceneBackdrop(st, 'bamby');
-    // Fuegos artificiales más seguidos
-    if(t === 6 || t % 38 === 0){
+    if(t === 8 || t % 46 === 0){
       sceneSpawnFirework(st, 20 + Math.random()*(W-40), 14 + Math.random()*(H*0.45));
     }
     sceneUpdateDrawFireworks(st);
-    // Confeti cayendo
-    if(st.confetti.length < 46 && t % 2 === 0){
-      st.confetti.push({ x: Math.random()*W, y: -6, vy: 0.5+Math.random()*0.9,
-        rot: Math.random()*6.28, vr: (Math.random()-0.5)*0.2,
+    // Confeti cayendo (suave)
+    if(st.confetti.length < 40 && t % 3 === 0){
+      st.confetti.push({ x: Math.random()*W, y: -6, vy: 0.4+Math.random()*0.7,
+        rot: Math.random()*6.28, vr: (Math.random()-0.5)*0.12,
         col: SCENE_FW_COLS[(Math.random()*SCENE_FW_COLS.length)|0], w: 3+Math.random()*2 });
     }
     for(let i=st.confetti.length-1;i>=0;i--){
       const cf = st.confetti[i];
-      cf.y += cf.vy; cf.x += Math.sin(cf.rot)*0.5; cf.rot += cf.vr;
+      cf.y += cf.vy; cf.x += Math.sin(cf.rot)*0.4; cf.rot += cf.vr;
       if(cf.y > H+6){ st.confetti.splice(i,1); continue; }
       g.save();
       g.translate(cf.x, cf.y); g.rotate(cf.rot);
@@ -11730,18 +12046,18 @@ function startTrioFinal(){
       g.fillRect(-cf.w/2, -1, cf.w, 2);
       g.restore();
     }
-    // Sombras de las tres reinas
+    // Sombras
     g.fillStyle = 'rgba(0,0,0,0.35)';
-    g.beginPath(); g.ellipse(W*0.19, H-8, 22, 3.6, 0, 0, Math.PI*2); g.fill();
-    g.beginPath(); g.ellipse(W*0.5,  H-8, 26, 4.2, 0, 0, Math.PI*2); g.fill();
-    g.beginPath(); g.ellipse(W*0.81, H-8, 22, 3.6, 0, 0, Math.PI*2); g.fill();
-    // Lulu y Turna a los lados, Bamby (reina madre) al centro, más grande
-    g.save(); g.translate(W*0.19, H-9); g.scale(1.0, 1.0); drawQueen(g, 'lulu', t); g.restore();
-    g.save(); g.translate(W*0.81, H-9); g.scale(1.0, 1.0); drawQueen(g, 'turna', t+40); g.restore();
-    g.save(); g.translate(W*0.5, H-9); g.scale(1.2, 1.2); drawQueen(g, 'bamby', t+80); g.restore();
-    // El héroe festejando adelante
-    g.save(); g.translate(W*0.345, H-3); g.scale(0.8, 0.8); drawHeroMini(g, t); g.restore();
-    // Corazones dorados
+    [[0.14,21],[0.38,21],[0.62,24],[0.86,21]].forEach(pair=>{
+      g.beginPath(); g.ellipse(W*pair[0], H-8, pair[1], 3.6, 0, 0, Math.PI*2); g.fill();
+    });
+    // Lulu | Miel | Bamby (reina madre, más grande) | Turna
+    g.save(); g.translate(W*0.14, H-9); g.scale(0.92, 0.92); drawQueen(g, 'lulu', t); g.restore();
+    g.save(); g.translate(W*0.86, H-9); g.scale(0.92, 0.92); drawQueen(g, 'turna', t+60); g.restore();
+    g.save(); g.translate(W*0.38, H-9); g.scale(0.92, 0.92); drawQueen(g, 'miel', t+120); g.restore();
+    g.save(); g.translate(W*0.62, H-9); g.scale(1.08, 1.08); drawQueen(g, 'bamby', t+180); g.restore();
+    // Héroe festejando adelante
+    g.save(); g.translate(W*0.5, H-3); g.scale(0.68, 0.68); drawHeroMini(g, t); g.restore();
     sceneUpdateDrawHearts(st, '#ffd34d');
   });
 }
@@ -11763,9 +12079,9 @@ function showFinalVictory(){
   msg.innerHTML = `
     <div class="msg-card msg-card-win">
       <h2 class="msg-title">★ ¡VICTORIA TOTAL! ★</h2>
-      <p class="msg-sub">Rescataste a las tres princesas: <strong style="color:#ff80a0">Lulu</strong>, <strong style="color:#c080ff">Turna</strong> y la <strong style="color:#ffd34d">Reina Bamby</strong></p>
+      <p class="msg-sub">Rescataste a las cuatro princesas: <strong style="color:#ff80a0">Lulu</strong>, <strong style="color:#c080ff">Turna</strong>, la <strong style="color:#ffd34d">Reina Bamby</strong> y <strong style="color:#ffb35c">Miel</strong></p>
       <div style="display:flex;justify-content:center;gap:8px;margin:10px 0 6px 0;">
-        <canvas id="trio-final" width="300" height="170" style="background:linear-gradient(180deg,#1a2438,#08121c);border-radius:10px;box-shadow:0 4px 18px rgba(255,180,220,0.4)"></canvas>
+        <canvas id="trio-final" width="340" height="170" style="background:linear-gradient(180deg,#1a2438,#08121c);border-radius:10px;box-shadow:0 4px 18px rgba(255,180,220,0.4)"></canvas>
       </div>
       <p class="msg-sub" style="font-size:13px;color:#ffd34d;margin-top:0">
         El reino canino está a salvo gracias a <strong style="color:#ffd34d">${heroName}</strong>
